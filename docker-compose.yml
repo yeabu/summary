@@ -1,0 +1,31 @@
+version: '3.9'
+services:
+  mysql:
+    image: mysql:8
+    container_name: my-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: your_db
+      MYSQL_USER: youruser
+      MYSQL_PASSWORD: yourpass
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./mysql-data:/var/lib/mysql
+
+  backend:
+    build: ./backend
+    container_name: backend-app
+    env_file: ./backend/.env
+    depends_on:
+      - mysql
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build: ./react-app
+    container_name: frontend-app
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
