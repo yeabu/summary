@@ -54,7 +54,7 @@ func main() {
 	loadEnv()
 
 	db.Init()
-	db.DB.AutoMigrate(&models.User{}, &models.Base{}, &models.BaseSection{}, &models.PurchaseEntry{}, &models.PurchaseEntryItem{}, &models.BaseExpense{})
+	db.DB.AutoMigrate(&models.User{}, &models.Base{}, &models.BaseSection{}, &models.PurchaseEntry{}, &models.PurchaseEntryItem{}, &models.BaseExpense{}, &models.PayableRecord{}, &models.PaymentRecord{}, &models.ExpenseCategory{})
 	addr := ":8080"
 	if os.Getenv("PORT") != "" {
 		addr = ":" + os.Getenv("PORT")

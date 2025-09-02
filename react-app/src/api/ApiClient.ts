@@ -1,373 +1,507 @@
-import useAuthStore from "../auth/AuthStore";
 import { getValidAccessTokenOrRefresh } from "../utils/authToken";
-import {
-  LoginRequest,
-  LoginResponse,
-  ChangePasswordRequest,
-  BaseExpense,
-  BaseExpenseListRequest,
-  BaseExpenseListResponse,
-  BaseExpenseStatsRequest,
-  BaseExpenseStatsResponse,
-  Purchase,
-  PurchaseListResponse,
-  Base,
-  BaseSection,
-  BaseListResponse,
-  User,
-  UserListResponse,
-  ApiResponse
-} from './AppDtos';
 
-// 登录接口
-export const login = async (name: string, password: string): Promise<LoginResponse> => {
-  const apiUrl = import.meta.env.VITE_API_URL;
-  
-  const response = await fetch(`${apiUrl}/api/login`, {
-    method: 'POST',
-    headers: {
+// 基地类型定义
+export interface Base {
+  id: number;
+  name: string;
+  code: string;
+  location?: string;
+  description?: string;
+  status: string;
+  created_by: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// 基地区域类型定义
+export interface BaseSection {
+  id: number;
+  name: string;
+  base_id: number;
+  base?: Base;
+  captain_id?: number;
+  captain_name?: string;
+  area?: number;
+  description?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// 用户类型定义
+export interface User {
+  id: number;
+  name: string;
+  role: string;
+  base_ids?: number[];  // 用户关联的基地ID列表
+  bases?: Base[];       // 用户关联的基地列表
+  join_date?: string;
+  mobile?: string;
+  passport_number?: string;
+  visa_expiry_date?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// 采购记录类型定义
+export interface PurchaseEntry {
+  id: number;
+  supplier_id?: number; // 供应商ID
+  supplier?: string; // 供应商名称（关联字段）
+  order_number: string;
+  purchase_date: string;
+  total_amount: number;
+  receiver: string;
+  base_id: number;
+  base?: Base;
+  created_by: number;
+  creator_name: string;
+  created_at: string;
+  updated_at: string;
+  items: PurchaseEntryItem[];
+}
+
+// 采购明细类型定义
+export interface PurchaseEntryItem {
+  id: number;
+  purchase_entry_id: number;
+  product_name: string;
+  quantity: number;
+  unit_price: number;
+  amount: number;
+}
+
+// 费用记录类型定义
+export interface ExpenseEntry {
+  id: number;
+  date: string;
+  category: string;
+  category_id: number;  // 添加category_id字段
+  amount: number;
+  detail: string;
+  base_id: number;
+  base?: Base;
+  created_by: number;
+  creator_name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// 供应商类型定义
+export interface Supplier {
+  id: number;
+  name: string;
+  contact_person?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// 费用类别类型定义
+export interface ExpenseCategory {
+  id: number;
+  name: string;
+  status: 'active' | 'inactive';
+  created_at: string;
+  updated_at: string;
+}
+
+export class ApiClient {
+  private apiUrl = import.meta.env.VITE_API_URL;
+
+  // 基地管理API
+  async baseCreate(data: Omit<Base, 'id' | 'created_at' | 'updated_at'>): Promise<Base> {
+    return this.apiCall<Base>('/api/base/create', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async baseList(): Promise<Base[]> {
+    return this.apiCall<Base[]>('/api/base/list');
+  }
+
+  async baseGet(id: number): Promise<Base> {
+    return this.apiCall<Base>(`/api/base/get?id=${id}`);
+  }
+
+  async baseUpdate(id: number, data: Partial<Omit<Base, 'id' | 'created_at' | 'updated_at'>>): Promise<Base> {
+    return this.apiCall<Base>(`/api/base/update?id=${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async baseDelete(id: number): Promise<void> {
+    await this.apiCall(`/api/base/delete?id=${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  async baseBatchDelete(ids: number[]): Promise<{ deleted_count: number }> {
+    return this.apiCall<{ deleted_count: number }>('/api/base/batch-delete', {
+      method: 'POST',
+      body: JSON.stringify({ ids })
+    });
+  }
+
+  // 基地区域管理API
+  async sectionCreate(data: Omit<BaseSection, 'id' | 'created_at' | 'updated_at'>): Promise<BaseSection> {
+    return this.apiCall<BaseSection>('/api/base-section/create', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async sectionList(base_id?: number): Promise<BaseSection[]> {
+    const params = new URLSearchParams();
+    if (base_id) params.append('base_id', base_id.toString());
+    return this.apiCall<BaseSection[]>(`/api/base-section/list?${params.toString()}`);
+  }
+
+  async sectionGet(id: number): Promise<BaseSection> {
+    return this.apiCall<BaseSection>(`/api/base-section/get?id=${id}`);
+  }
+
+  async sectionUpdate(id: number, data: Partial<Omit<BaseSection, 'id' | 'created_at' | 'updated_at'>>): Promise<BaseSection> {
+    return this.apiCall<BaseSection>(`/api/base-section/update?id=${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async sectionDelete(id: number): Promise<void> {
+    await this.apiCall(`/api/base-section/delete?id=${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  // 用户管理API
+  async userCreate(data: Omit<User, 'id' | 'created_at' | 'updated_at' | 'bases'> & { 
+    base_ids?: number[];
+    password: string;
+  }): Promise<User> {
+    // 转换数据结构以匹配后端API
+    const requestData = {
+      name: data.name,
+      role: data.role,
+      base_ids: data.base_ids || [], // 使用base_ids而不是base_id
+      password: data.password,
+      join_date: data.join_date,
+      mobile: data.mobile,
+      passport_number: data.passport_number,
+      visa_expiry_date: data.visa_expiry_date
+    };
+    
+    return this.apiCall<User>('/api/user/create', {
+      method: 'POST',
+      body: JSON.stringify(requestData)
+    });
+  }
+
+  async userList(): Promise<User[]> {
+    return this.apiCall<User[]>('/api/user/list');
+  }
+
+  async userGet(id: number): Promise<User> {
+    return this.apiCall<User>(`/api/user/get?id=${id}`);
+  }
+
+  async userUpdate(id: number, data: Partial<Omit<User, 'id' | 'created_at' | 'updated_at' | 'bases'>> & { 
+    base_ids?: number[];
+    password?: string; // 添加password字段到类型定义中
+  }): Promise<User> {
+    // 转换数据结构以匹配后端API
+    const requestData = {
+      name: data.name,
+      role: data.role,
+      base_ids: data.base_ids || [], // 使用base_ids而不是base_id
+      join_date: data.join_date,
+      mobile: data.mobile,
+      passport_number: data.passport_number,
+      visa_expiry_date: data.visa_expiry_date
+    };
+    
+    // 只有在密码不为空时才添加到请求数据中
+    if (data.password) {
+      (requestData as any).password = data.password;
+    }
+    
+    return this.apiCall<User>(`/api/user/update?id=${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(requestData)
+    });
+  }
+
+  async userDelete(id: number): Promise<void> {
+    await this.apiCall(`/api/user/delete?id=${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  async userBatchDelete(ids: number[]): Promise<{ deleted_count: number }> {
+    return this.apiCall<{ deleted_count: number }>('/api/user/batch-delete', {
+      method: 'POST',
+      body: JSON.stringify({ ids })
+    });
+  }
+
+  async userResetPassword(id: number, password: string): Promise<void> {
+    await this.apiCall(`/api/user/reset-password?id=${id}`, {
+      method: 'POST',
+      body: JSON.stringify({ password })
+    });
+  }
+
+  // 采购管理API
+  async createPurchase(data: Omit<PurchaseEntry, 'id' | 'created_at' | 'updated_at' | 'items' | 'creator_name' | 'created_by'> & { 
+    items: Omit<PurchaseEntryItem, 'id' | 'purchase_entry_id'>[] 
+  }): Promise<PurchaseEntry> {
+    // 转换数据结构以匹配后端API
+    const requestData = {
+      supplier_id: data.supplier_id,
+      order_number: data.order_number,
+      purchase_date: data.purchase_date,
+      total_amount: data.total_amount,
+      receiver: data.receiver,
+      base_id: data.base_id, // 使用base_id而不是base对象
+      items: data.items
+    };
+    
+    return this.apiCall<PurchaseEntry>('/api/purchase/create', {
+      method: 'POST',
+      body: JSON.stringify(requestData)
+    });
+  }
+
+  async listPurchase(filters?: {
+    base?: string;
+    supplier?: string;
+    order_number?: string;
+    start_date?: string;
+    end_date?: string;
+  }): Promise<PurchaseEntry[]> {
+    const params = new URLSearchParams();
+    if (filters?.base) params.append('base', filters.base);
+    if (filters?.supplier) params.append('supplier', filters.supplier);
+    if (filters?.order_number) params.append('order_number', filters.order_number);
+    if (filters?.start_date) params.append('start_date', filters.start_date);
+    if (filters?.end_date) params.append('end_date', filters.end_date);
+    
+    return this.apiCall<PurchaseEntry[]>(`/api/purchase/list?${params.toString()}`);
+  }
+
+  async deletePurchase(id: number): Promise<void> {
+    await this.apiCall(`/api/purchase/delete?id=${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  async batchDeletePurchase(ids: number[]): Promise<{ deleted_count: number }> {
+    return this.apiCall<{ deleted_count: number }>('/api/purchase/batch-delete', {
+      method: 'POST',
+      body: JSON.stringify({ ids })
+    });
+  }
+
+  // 添加更新采购记录的方法
+  async updatePurchase(id: number, data: Omit<PurchaseEntry, 'id' | 'created_at' | 'updated_at' | 'items' | 'creator_name' | 'created_by'> & { 
+    items: Omit<PurchaseEntryItem, 'id' | 'purchase_entry_id'>[] 
+  }): Promise<PurchaseEntry> {
+    // 转换数据结构以匹配后端API
+    const requestData = {
+      supplier_id: data.supplier_id,
+      order_number: data.order_number,
+      purchase_date: data.purchase_date,
+      total_amount: data.total_amount,
+      receiver: data.receiver,
+      base_id: data.base_id, // 使用base_id而不是base对象
+      items: data.items
+    };
+    
+    return this.apiCall<PurchaseEntry>(`/api/purchase/update?id=${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(requestData)
+    });
+  }
+
+  // 费用管理API
+  async createExpense(data: Omit<ExpenseEntry, 'id' | 'created_at' | 'updated_at' | 'creator_name' | 'created_by'>): Promise<ExpenseEntry> {
+    // 转换数据结构以匹配后端API
+    const requestData = {
+      date: data.date,
+      category_id: data.category_id, // 修改为category_id
+      amount: data.amount,
+      detail: data.detail,
+      base_id: data.base_id // 使用base_id而不是base对象
+    };
+    
+    return this.apiCall<ExpenseEntry>('/api/expense/create', {
+      method: 'POST',
+      body: JSON.stringify(requestData)
+    });
+  }
+
+  async listExpense(filters?: {
+    base?: string;
+    category?: string;
+    category_id?: number; // 添加category_id筛选参数
+    start_date?: string;
+    end_date?: string;
+  }): Promise<ExpenseEntry[]> {
+    const params = new URLSearchParams();
+    if (filters?.base) params.append('base', filters.base);
+    if (filters?.category) params.append('category', filters.category);
+    if (filters?.category_id) params.append('category_id', filters.category_id.toString()); // 添加category_id参数
+    if (filters?.start_date) params.append('start_date', filters.start_date);
+    if (filters?.end_date) params.append('end_date', filters.end_date);
+    
+    return this.apiCall<ExpenseEntry[]>(`/api/expense/list?${params.toString()}`);
+  }
+
+  async updateExpense(id: number, data: Partial<Omit<ExpenseEntry, 'id' | 'created_at' | 'updated_at' | 'creator_name' | 'created_by'>>): Promise<ExpenseEntry> {
+    // 转换数据结构以匹配后端API
+    const requestData = {
+      date: data.date,
+      category_id: data.category_id, // 修改为category_id
+      amount: data.amount,
+      detail: data.detail
+    };
+    
+    return this.apiCall<ExpenseEntry>(`/api/expense/update?id=${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(requestData)
+    });
+  }
+
+  async deleteExpense(id: number): Promise<void> {
+    await this.apiCall(`/api/expense/delete?id=${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  async batchDeleteExpense(ids: number[]): Promise<{ deleted_count: number }> {
+    return this.apiCall<{ deleted_count: number }>('/api/expense/batch-delete', {
+      method: 'POST',
+      body: JSON.stringify({ ids })
+    });
+  }
+
+  async statExpense(params?: {
+    base?: string;
+    category?: string;
+    month?: string;
+    start_date?: string;
+    end_date?: string;
+  }): Promise<any> {
+    const searchParams = new URLSearchParams();
+    if (params?.base) searchParams.append('base', params.base);
+    if (params?.category) searchParams.append('category', params.category);
+    if (params?.month) searchParams.append('month', params.month);
+    if (params?.start_date) searchParams.append('start_date', params.start_date);
+    if (params?.end_date) searchParams.append('end_date', params.end_date);
+    
+    return this.apiCall<any>(`/api/expense/stats?${searchParams.toString()}`);
+  }
+
+  // 费用类别管理API
+  async createExpenseCategory(data: Omit<ExpenseCategory, 'id' | 'created_at' | 'updated_at'>): Promise<ExpenseCategory> {
+    return this.apiCall<ExpenseCategory>('/api/expense-category/create', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async listExpenseCategories(status?: 'active' | 'inactive'): Promise<ExpenseCategory[]> {
+    const params = new URLSearchParams();
+    if (status) params.append('status', status);
+    return this.apiCall<ExpenseCategory[]>(`/api/expense-category/list?${params.toString()}`);
+  }
+
+  async getExpenseCategory(id: number): Promise<ExpenseCategory> {
+    return this.apiCall<ExpenseCategory>(`/api/expense-category/get?id=${id}`);
+  }
+
+  async updateExpenseCategory(id: number, data: Partial<Omit<ExpenseCategory, 'id' | 'created_at' | 'updated_at'>>): Promise<ExpenseCategory> {
+    return this.apiCall<ExpenseCategory>(`/api/expense-category/update?id=${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async deleteExpenseCategory(id: number): Promise<void> {
+    await this.apiCall(`/api/expense-category/delete?id=${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  // 供应商管理API
+  async getAllSuppliers(): Promise<Supplier[]> {
+    return this.apiCall<Supplier[]>('/api/supplier/all');
+  }
+
+  async getSupplierList(params?: {
+    page?: number;
+    limit?: number;
+    name?: string;
+  }): Promise<{ records: Supplier[]; total: number }> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.append('page', params.page.toString());
+    if (params?.limit) searchParams.append('limit', params.limit.toString());
+    if (params?.name) searchParams.append('name', params.name);
+    
+    return this.apiCall<{ records: Supplier[]; total: number }>(`/api/supplier/list?${searchParams.toString()}`);
+  }
+
+  async getSupplierDetail(id: number): Promise<Supplier> {
+    return this.apiCall<Supplier>(`/api/supplier/detail?id=${id}`);
+  }
+
+  async createSupplier(data: Omit<Supplier, 'id' | 'created_at' | 'updated_at'>): Promise<Supplier> {
+    return this.apiCall<Supplier>('/api/supplier/create', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async updateSupplier(id: number, data: Partial<Omit<Supplier, 'id' | 'created_at' | 'updated_at'>>): Promise<Supplier> {
+    return this.apiCall<Supplier>(`/api/supplier/update?id=${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async deleteSupplier(id: number): Promise<void> {
+    await this.apiCall(`/api/supplier/delete?id=${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  // API调用辅助函数
+  private async apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    // 获取有效token
+    const token = await getValidAccessTokenOrRefresh();
+
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ name, password } as LoginRequest)
-  });
+      ...(options.headers as Record<string, string> || {}),
+    };
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(error || `HTTP ${response.status}`);
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${this.apiUrl}${endpoint}`, {
+      ...options,
+      headers,
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(error || `HTTP ${response.status}`);
+    }
+
+    return response.json() as Promise<T>;
   }
-  
-  return response.json() as Promise<LoginResponse>;
-};
-
-// 通用API调用函数
-const apiCall = async <T>(endpoint: string, options: RequestInit = {}): Promise<T> => {
-  const apiUrl = import.meta.env.VITE_API_URL;
-  const token = await getValidAccessTokenOrRefresh();
-  
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string> || {}),
-  };
-  
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  const response = await fetch(`${apiUrl}${endpoint}`, {
-    ...options,
-    headers,
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(error || `HTTP ${response.status}`);
-  }
-  
-  return response.json() as Promise<T>;
-};
-
-// 费用管理API
-export const expenseApi = {
-  // 创建费用记录
-  create: (data: Omit<BaseExpense, 'id' | 'created_by' | 'creator_name' | 'created_at' | 'updated_at'>): Promise<BaseExpense> => {
-    return apiCall('/api/expense/create', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  },
-  
-  // 查询费用记录
-  list: (params?: BaseExpenseListRequest): Promise<{ data: BaseExpense[]; total: number; page: number; page_size: number }> => {
-    const query = params ? '?' + new URLSearchParams(params as any).toString() : '';
-    console.log('API请求参数:', params);
-    console.log('API请求URL:', `/api/expense/list${query}`);
-    
-    return apiCall<BaseExpense[]>(`/api/expense/list${query}`).then(expenses => {
-      console.log('后端返回的原始数据:', expenses);
-      console.log('数据类型:', typeof expenses, '是否为数组:', Array.isArray(expenses));
-      
-      // 后端直接返回所有匹配的数组数据，前端进行分页处理
-      const pageSize = params?.page_size || 20;
-      const currentPage = params?.page || 1;
-      
-      // 确保数据是数组
-      const expenseArray = Array.isArray(expenses) ? expenses : [];
-      console.log('处理后的数组数据:', expenseArray);
-      
-      // 确保数据按日期倒序排列（最新的在前面）
-      const sortedExpenses = expenseArray.sort((a, b) => {
-        const dateA = new Date(a.date);
-        const dateB = new Date(b.date);
-        return dateB.getTime() - dateA.getTime();
-      });
-      
-      console.log('排序后的数据:', sortedExpenses);
-      
-      // 前端分页处理
-      const startIndex = (currentPage - 1) * pageSize;
-      const endIndex = startIndex + pageSize;
-      const paginatedData = sortedExpenses.slice(startIndex, endIndex);
-      
-      const result = {
-        data: paginatedData,
-        total: sortedExpenses.length,
-        page: currentPage,
-        page_size: pageSize
-      };
-      
-      console.log('最终返回结果:', result);
-      return result;
-    });
-  },
-  
-  // 更新费用记录
-  update: (id: number, data: Partial<BaseExpense>): Promise<BaseExpense> => {
-    return apiCall(`/api/expense/update?id=${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data)
-    });
-  },
-  
-  // 费用统计
-  stats: (month: string, base?: string): Promise<BaseExpenseStatsResponse> => {
-    const params = new URLSearchParams({ month });
-    if (base) params.set('base', base);
-    return apiCall(`/api/expense/stats?${params.toString()}`);
-  },
-
-  // 删除费用记录
-  delete: (id: number): Promise<ApiResponse> => {
-    return apiCall(`/api/expense/delete?id=${id}`, {
-      method: 'DELETE'
-    });
-  },
-
-  // 批量删除费用记录
-  batchDelete: (ids: number[]): Promise<ApiResponse> => {
-    return apiCall('/api/expense/batch-delete', {
-      method: 'POST',
-      body: JSON.stringify({ ids })
-    });
-  }
-};
-
-// 采购管理API
-export const purchaseApi = {
-  // 创建采购记录
-  create: (data: Omit<Purchase, 'id' | 'created_by' | 'creator_name' | 'created_at' | 'updated_at'>): Promise<Purchase> => {
-    return apiCall('/api/purchase/create', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  },
-  
-  // 查询采购记录
-  list: (params?: any): Promise<{ data: Purchase[] }> => {
-    const query = params ? '?' + new URLSearchParams(params as any).toString() : '';
-    console.log('采购API请求参数:', params);
-    console.log('采购API请求URL:', `/api/purchase/list${query}`);
-    
-    return apiCall<Purchase[]>(`/api/purchase/list${query}`).then(purchases => {
-      console.log('采购API原始返回数据:', purchases);
-      console.log('采购数据数组长度:', purchases?.length || 0);
-      
-      // 确保返回的数据是数组
-      const dataArray = Array.isArray(purchases) ? purchases : [];
-      console.log('采购处理后数据数组长度:', dataArray.length);
-      
-      // 按日期排序，最新的在前
-      const sortedPurchases = dataArray.sort((a, b) => {
-        const dateA = new Date(a.purchase_date || 0);
-        const dateB = new Date(b.purchase_date || 0);
-        return dateB.getTime() - dateA.getTime();
-      });
-      
-      console.log('采购排序后数据:', sortedPurchases);
-      
-      const result = { data: sortedPurchases };
-      console.log('采购最终返回结果:', result);
-      return result;
-    });
-  },
-
-  // 更新采购记录
-  update: (id: number, data: Partial<Purchase>): Promise<Purchase> => {
-    return apiCall(`/api/purchase/update?id=${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data)
-    });
-  },
-
-  // 删除采购记录
-  delete: (id: number): Promise<ApiResponse> => {
-    return apiCall(`/api/purchase/delete?id=${id}`, {
-      method: 'DELETE'
-    });
-  },
-
-  // 批量删除采购记录
-  batchDelete: (ids: number[]): Promise<ApiResponse> => {
-    return apiCall('/api/purchase/batch-delete', {
-      method: 'POST',
-      body: JSON.stringify({ ids })
-    });
-  }
-};
-
-// 人员管理API
-export const userApi = {
-  // 修改密码
-  changePassword: (oldPwd: string, newPwd: string): Promise<ApiResponse> => {
-    return apiCall('/api/user/change_password', {
-      method: 'POST',
-      body: JSON.stringify({ old_pwd: oldPwd, new_pwd: newPwd } as ChangePasswordRequest)
-    });
-  }
-};
-
-// 基地分区管理API
-export const baseSectionApi = {
-  // 创建基地分区
-  create: (data: Omit<BaseSection, 'id' | 'created_by' | 'created_at' | 'updated_at'>): Promise<BaseSection> => {
-    return apiCall('/api/base-section/create', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  },
-  
-  // 查询基地分区列表
-  list: (params?: any): Promise<BaseSection[]> => {
-    const query = params ? '?' + new URLSearchParams(params as any).toString() : '';
-    return apiCall<BaseSection[]>(`/api/base-section/list${query}`);
-  },
-
-  // 获取单个基地分区
-  get: (id: number): Promise<BaseSection> => {
-    return apiCall(`/api/base-section/get?id=${id}`);
-  },
-
-  // 更新基地分区
-  update: (id: number, data: Partial<BaseSection>): Promise<BaseSection> => {
-    return apiCall(`/api/base-section/update?id=${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data)
-    });
-  },
-
-  // 删除基地分区
-  delete: (id: number): Promise<ApiResponse> => {
-    return apiCall(`/api/base-section/delete?id=${id}`, {
-      method: 'DELETE'
-    });
-  }
-};
-
-// 基地管理API
-export const baseApi = {
-  // 创建基地
-  create: (data: Omit<Base, 'id' | 'created_by' | 'created_at' | 'updated_at'>): Promise<Base> => {
-    return apiCall('/api/base/create', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  },
-  
-  // 查询基地列表
-  list: (params?: any): Promise<Base[]> => {
-    const query = params ? '?' + new URLSearchParams(params as any).toString() : '';
-    return apiCall<Base[]>(`/api/base/list${query}`);
-  },
-
-  // 获取单个基地
-  get: (id: number): Promise<Base> => {
-    return apiCall(`/api/base/get?id=${id}`);
-  },
-
-  // 更新基地
-  update: (id: number, data: Partial<Base>): Promise<Base> => {
-    return apiCall(`/api/base/update?id=${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data)
-    });
-  },
-
-  // 删除基地
-  delete: (id: number): Promise<ApiResponse> => {
-    return apiCall(`/api/base/delete?id=${id}`, {
-      method: 'DELETE'
-    });
-  },
-
-  // 批量删除基地
-  batchDelete: (ids: number[]): Promise<ApiResponse> => {
-    return apiCall('/api/base/batch-delete', {
-      method: 'POST',
-      body: JSON.stringify({ ids })
-    });
-  }
-};
-
-// 人员管理API
-export const userManagementApi = {
-  // 创建用户
-  create: (data: Omit<User, 'id' | 'created_at' | 'updated_at'>): Promise<User> => {
-    return apiCall('/api/user/create', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  },
-  
-  // 查询用户列表
-  list: (params?: any): Promise<User[]> => {
-    const query = params ? '?' + new URLSearchParams(params as any).toString() : '';
-    return apiCall<User[]>(`/api/user/list${query}`);
-  },
-
-  // 获取单个用户
-  get: (id: number): Promise<User> => {
-    return apiCall(`/api/user/get?id=${id}`);
-  },
-
-  // 更新用户
-  update: (id: number, data: Partial<User>): Promise<User> => {
-    return apiCall(`/api/user/update?id=${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data)
-    });
-  },
-
-  // 删除用户
-  delete: (id: number): Promise<ApiResponse> => {
-    return apiCall(`/api/user/delete?id=${id}`, {
-      method: 'DELETE'
-    });
-  },
-
-  // 批量删除用户
-  batchDelete: (ids: number[]): Promise<ApiResponse> => {
-    return apiCall('/api/user/batch-delete', {
-      method: 'POST',
-      body: JSON.stringify({ ids })
-    });
-  },
-
-  // 重置用户密码
-  resetPassword: (id: number, newPassword: string): Promise<ApiResponse> => {
-    return apiCall(`/api/user/reset-password?id=${id}`, {
-      method: 'POST',
-      body: JSON.stringify({ new_password: newPassword })
-    });
-  }
-};
-
-const ApiClient = {
-  login,
-  expense: expenseApi,
-  purchase: purchaseApi,
-  user: userApi,
-  base: baseApi,
-  baseSection: baseSectionApi,
-  userManagement: userManagementApi
-};
-
-export default ApiClient;
+}

@@ -6,7 +6,8 @@ export interface User {
   id?: number;
   name: string;
   role: 'admin' | 'base_agent' | 'captain' | 'factory_manager';
-  base?: string;
+  base_ids?: number[];  // 用户关联的基地ID列表
+  bases?: Base[];       // 用户关联的基地列表
   password?: string;  // 只在创建/更新时使用
   join_date?: string;        // 入司时间 (格式: YYYY-MM-DD)
   mobile?: string;           // 手机号
@@ -24,7 +25,7 @@ export interface LoginRequest {
 export interface LoginResponse {
   token: string;
   role: string;
-  base: string;
+  bases: string[];  // 用户关联的基地代码列表
   user_id: number;
 }
 
@@ -33,13 +34,24 @@ export interface ChangePasswordRequest {
   new_pwd: string;
 }
 
+// 费用类别相关接口
+export interface ExpenseCategory {
+  id: number;
+  name: string;
+  code?: string;
+  status: 'active' | 'inactive';
+  created_at?: string;
+  updated_at?: string;
+}
+
 // 费用记录相关接口
 export interface BaseExpense {
   id?: number;
   date: string;
-  category: string;
+  category: ExpenseCategory;  // 保持category对象用于显示
+  category_id: number;        // 添加category_id字段用于提交
   amount: number;
-  base: string;
+  base: Base;
   detail?: string;
   created_by?: number;
   creator_name?: string;
@@ -50,6 +62,7 @@ export interface BaseExpense {
 export interface BaseExpenseListRequest {
   base?: string;
   category?: string;
+  category_id?: number;      // 添加category_id筛选参数
   start_date?: string;
   end_date?: string;
   page?: number;
@@ -102,7 +115,8 @@ export interface Purchase {
   purchase_date: string;
   total_amount: number;
   receiver: string;
-  base: string;
+  base: Base;
+  base_id?: number;  // 添加base_id字段用于提交
   notes?: string;
   items: PurchaseItem[];
   created_by?: number;
@@ -140,6 +154,7 @@ export interface PaginationResponse {
 export interface FilterOptions {
   base?: string;
   category?: string;
+  category_id?: number;      // 添加category_id筛选参数
   start_date?: string;
   end_date?: string;
   supplier?: string;
@@ -198,8 +213,13 @@ export interface ChartData {
   datasets: {
     label: string;
     data: number[];
-    backgroundColor?: string[];
-    borderColor?: string[];
   }[];
 }
 
+export interface ChartDataset {
+  label: string;
+  data: number[];
+  backgroundColor?: string | string[];
+  borderColor?: string | string[];
+  borderWidth?: number;
+}

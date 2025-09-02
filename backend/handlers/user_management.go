@@ -15,8 +15,8 @@ import (
 // CreateUserRequest 创建用户请求结构
 type CreateUserRequest struct {
 	Name           string `json:"name"`
-	Role           string `json:"role"` // "admin", "base_agent", "captain", "factory_manager"
-	Base           string `json:"base"` // 所属基地
+	Role           string `json:"role"`               // "admin", "base_agent", "captain", "factory_manager"
+	BaseIDs        []uint `json:"base_ids,omitempty"` // 所属基地ID列表
 	Password       string `json:"password"`
 	JoinDate       string `json:"join_date,omitempty"`        // 入司时间 (格式: 2006-01-02)
 	Mobile         string `json:"mobile,omitempty"`           // 手机号
@@ -28,7 +28,7 @@ type CreateUserRequest struct {
 type UpdateUserRequest struct {
 	Name           string `json:"name"`
 	Role           string `json:"role"`
-	Base           string `json:"base"`
+	BaseIDs        []uint `json:"base_ids,omitempty"`         // 所属基地ID列表
 	Password       string `json:"password,omitempty"`         // 可选，为空时不更新密码
 	JoinDate       string `json:"join_date,omitempty"`        // 入司时间 (格式: 2006-01-02)
 	Mobile         string `json:"mobile,omitempty"`           // 手机号
@@ -38,16 +38,17 @@ type UpdateUserRequest struct {
 
 // UserResponse 用户响应结构（不包含密码）
 type UserResponse struct {
-	ID             uint   `json:"id"`
-	Name           string `json:"name"`
-	Role           string `json:"role"`
-	Base           string `json:"base"`
-	JoinDate       string `json:"join_date,omitempty"`
-	Mobile         string `json:"mobile,omitempty"`
-	PassportNumber string `json:"passport_number,omitempty"`
-	VisaExpiryDate string `json:"visa_expiry_date,omitempty"`
-	CreatedAt      string `json:"created_at,omitempty"`
-	UpdatedAt      string `json:"updated_at,omitempty"`
+	ID             uint          `json:"id"`
+	Name           string        `json:"name"`
+	Role           string        `json:"role"`
+	BaseIDs        []uint        `json:"base_ids,omitempty"` // 所属基地ID列表
+	Bases          []models.Base `json:"bases,omitempty"`    // 关联的基地信息列表
+	JoinDate       string        `json:"join_date,omitempty"`
+	Mobile         string        `json:"mobile,omitempty"`
+	PassportNumber string        `json:"passport_number,omitempty"`
+	VisaExpiryDate string        `json:"visa_expiry_date,omitempty"`
+	CreatedAt      string        `json:"created_at,omitempty"`
+	UpdatedAt      string        `json:"updated_at,omitempty"`
 }
 
 // CreateUser 创建用户
@@ -90,9 +91,9 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 非管理员角色必须指定基地
-	if req.Role != "admin" && req.Base == "" {
-		http.Error(w, "非管理员角色必须指定基地", http.StatusBadRequest)
+	// 非管理员角色必须指定至少一个基地
+	if req.Role != "admin" && len(req.BaseIDs) == 0 {
+		http.Error(w, "非管理员角色必须指定至少一个基地", http.StatusBadRequest)
 		return
 	}
 
@@ -110,11 +111,19 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 开始事务
+	tx := db.DB.Begin()
+	if tx.Error != nil {
+		http.Error(w, "数据库事务启动失败", http.StatusInternalServerError)
+		return
+	}
+
 	user := models.User{
-		Name:     req.Name,
-		Role:     req.Role,
-		Base:     req.Base,
-		Password: string(hashedPassword),
+		Name:           req.Name,
+		Role:           req.Role,
+		Password:       string(hashedPassword),
+		Mobile:         req.Mobile,
+		PassportNumber: req.PassportNumber,
 	}
 
 	// 处理可选日期字段
@@ -129,31 +138,52 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 处理其他字段
-	user.Mobile = req.Mobile
-	user.PassportNumber = req.PassportNumber
-
-	if err := db.DB.Create(&user).Error; err != nil {
+	if err := tx.Create(&user).Error; err != nil {
+		tx.Rollback()
 		http.Error(w, "创建用户失败", http.StatusInternalServerError)
 		return
 	}
+
+	// 创建用户与基地的关联关系
+	for _, baseID := range req.BaseIDs {
+		userBase := models.UserBase{
+			UserID: user.ID,
+			BaseID: baseID,
+		}
+		if err := tx.Create(&userBase).Error; err != nil {
+			tx.Rollback()
+			http.Error(w, "创建用户基地关联失败", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// 提交事务
+	if err := tx.Commit().Error; err != nil {
+		http.Error(w, "提交事务失败", http.StatusInternalServerError)
+		return
+	}
+
+	// 预加载基地信息
+	db.DB.Preload("Bases").First(&user, user.ID)
 
 	// 返回用户信息（不包含密码）
 	response := UserResponse{
 		ID:             user.ID,
 		Name:           user.Name,
 		Role:           user.Role,
-		Base:           user.Base,
+		BaseIDs:        make([]uint, len(user.Bases)),
+		Bases:          user.Bases,
 		Mobile:         user.Mobile,
 		PassportNumber: user.PassportNumber,
+		JoinDate:       formatTimePointer(user.JoinDate),
+		VisaExpiryDate: formatTimePointer(user.VisaExpiryDate),
+		CreatedAt:      user.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt:      user.UpdatedAt.Format("2006-01-02 15:04:05"),
 	}
 
-	// 处理日期字段的格式化
-	if user.JoinDate != nil {
-		response.JoinDate = user.JoinDate.Format("2006-01-02")
-	}
-	if user.VisaExpiryDate != nil {
-		response.VisaExpiryDate = user.VisaExpiryDate.Format("2006-01-02")
+	// 填充基地ID列表
+	for i, base := range user.Bases {
+		response.BaseIDs[i] = base.ID
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -177,7 +207,7 @@ func ListUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var users []models.User
-	query := db.DB.Select("id, name, role, base, join_date, mobile, passport_number, visa_expiry_date").Order("id desc")
+	query := db.DB.Select("id, name, role, join_date, mobile, passport_number, visa_expiry_date, created_at, updated_at").Preload("Bases").Order("id desc")
 
 	// 支持角色筛选
 	if role := r.URL.Query().Get("role"); role != "" {
@@ -185,8 +215,12 @@ func ListUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 支持基地筛选
-	if base := r.URL.Query().Get("base"); base != "" {
-		query = query.Where("base = ?", base)
+	if baseID := r.URL.Query().Get("base_id"); baseID != "" {
+		if id, err := strconv.ParseUint(baseID, 10, 64); err == nil {
+			// 通过关联表筛选
+			query = query.Joins("JOIN user_bases ON users.id = user_bases.user_id").
+				Where("user_bases.base_id = ?", id)
+		}
 	}
 
 	// 支持用户名模糊搜索
@@ -199,31 +233,33 @@ func ListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 转换为响应格式（不包含密码）
-	var responses []UserResponse
+	// 转换为响应结构
+	var response []UserResponse
 	for _, user := range users {
-		response := UserResponse{
+		resp := UserResponse{
 			ID:             user.ID,
 			Name:           user.Name,
 			Role:           user.Role,
-			Base:           user.Base,
+			BaseIDs:        make([]uint, len(user.Bases)),
+			Bases:          user.Bases,
 			Mobile:         user.Mobile,
 			PassportNumber: user.PassportNumber,
+			JoinDate:       formatTimePointer(user.JoinDate),
+			VisaExpiryDate: formatTimePointer(user.VisaExpiryDate),
+			CreatedAt:      user.CreatedAt.Format("2006-01-02 15:04:05"),
+			UpdatedAt:      user.UpdatedAt.Format("2006-01-02 15:04:05"),
 		}
 
-		// 处理日期字段的格式化
-		if user.JoinDate != nil {
-			response.JoinDate = user.JoinDate.Format("2006-01-02")
-		}
-		if user.VisaExpiryDate != nil {
-			response.VisaExpiryDate = user.VisaExpiryDate.Format("2006-01-02")
+		// 填充基地ID列表
+		for i, base := range user.Bases {
+			resp.BaseIDs[i] = base.ID
 		}
 
-		responses = append(responses, response)
+		response = append(response, resp)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(responses)
+	json.NewEncoder(w).Encode(response)
 }
 
 // GetUser 获取单个用户信息
@@ -249,7 +285,7 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var user models.User
-	if err := db.DB.Select("id, name, role, base, join_date, mobile, passport_number, visa_expiry_date").First(&user, userID).Error; err != nil {
+	if err := db.DB.Select("id, name, role, join_date, mobile, passport_number, visa_expiry_date, created_at, updated_at").Preload("Bases").First(&user, userID).Error; err != nil {
 		http.Error(w, "用户不存在", http.StatusNotFound)
 		return
 	}
@@ -258,17 +294,19 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 		ID:             user.ID,
 		Name:           user.Name,
 		Role:           user.Role,
-		Base:           user.Base,
+		BaseIDs:        make([]uint, len(user.Bases)),
+		Bases:          user.Bases,
 		Mobile:         user.Mobile,
 		PassportNumber: user.PassportNumber,
+		JoinDate:       formatTimePointer(user.JoinDate),
+		VisaExpiryDate: formatTimePointer(user.VisaExpiryDate),
+		CreatedAt:      user.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt:      user.UpdatedAt.Format("2006-01-02 15:04:05"),
 	}
 
-	// 处理日期字段的格式化
-	if user.JoinDate != nil {
-		response.JoinDate = user.JoinDate.Format("2006-01-02")
-	}
-	if user.VisaExpiryDate != nil {
-		response.VisaExpiryDate = user.VisaExpiryDate.Format("2006-01-02")
+	// 填充基地ID列表
+	for i, base := range user.Bases {
+		response.BaseIDs[i] = base.ID
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -321,9 +359,9 @@ func UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 非管理员角色必须指定基地
-	if req.Role != "admin" && req.Base == "" {
-		http.Error(w, "非管理员角色必须指定基地", http.StatusBadRequest)
+	// 非管理员角色必须指定至少一个基地
+	if req.Role != "admin" && len(req.BaseIDs) == 0 {
+		http.Error(w, "非管理员角色必须指定至少一个基地", http.StatusBadRequest)
 		return
 	}
 
@@ -344,7 +382,6 @@ func UpdateUser(w http.ResponseWriter, r *http.Request) {
 	// 更新用户信息
 	user.Name = req.Name
 	user.Role = req.Role
-	user.Base = req.Base
 	user.Mobile = req.Mobile
 	user.PassportNumber = req.PassportNumber
 
@@ -375,27 +412,67 @@ func UpdateUser(w http.ResponseWriter, r *http.Request) {
 		user.Password = string(hashedPassword)
 	}
 
-	if err := db.DB.Save(&user).Error; err != nil {
+	// 开始事务
+	tx := db.DB.Begin()
+	if tx.Error != nil {
+		http.Error(w, "数据库事务启动失败", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Save(&user).Error; err != nil {
+		tx.Rollback()
 		http.Error(w, "更新用户失败", http.StatusInternalServerError)
 		return
 	}
+
+	// 更新用户与基地的关联关系
+	// 先删除现有的关联关系
+	if err := tx.Where("user_id = ?", user.ID).Delete(&models.UserBase{}).Error; err != nil {
+		tx.Rollback()
+		http.Error(w, "删除旧的用户基地关联失败", http.StatusInternalServerError)
+		return
+	}
+
+	// 创建新的关联关系
+	for _, baseID := range req.BaseIDs {
+		userBase := models.UserBase{
+			UserID: user.ID,
+			BaseID: baseID,
+		}
+		if err := tx.Create(&userBase).Error; err != nil {
+			tx.Rollback()
+			http.Error(w, "创建新的用户基地关联失败", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// 提交事务
+	if err := tx.Commit().Error; err != nil {
+		http.Error(w, "提交事务失败", http.StatusInternalServerError)
+		return
+	}
+
+	// 重新加载用户信息（包含基地关联）
+	db.DB.Preload("Bases").First(&user, user.ID)
 
 	// 返回更新后的用户信息（不包含密码）
 	response := UserResponse{
 		ID:             user.ID,
 		Name:           user.Name,
 		Role:           user.Role,
-		Base:           user.Base,
+		BaseIDs:        make([]uint, len(user.Bases)),
+		Bases:          user.Bases,
 		Mobile:         user.Mobile,
 		PassportNumber: user.PassportNumber,
+		JoinDate:       formatTimePointer(user.JoinDate),
+		VisaExpiryDate: formatTimePointer(user.VisaExpiryDate),
+		CreatedAt:      user.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt:      user.UpdatedAt.Format("2006-01-02 15:04:05"),
 	}
 
-	// 处理日期字段的格式化
-	if user.JoinDate != nil {
-		response.JoinDate = user.JoinDate.Format("2006-01-02")
-	}
-	if user.VisaExpiryDate != nil {
-		response.VisaExpiryDate = user.VisaExpiryDate.Format("2006-01-02")
+	// 填充基地ID列表
+	for i, base := range user.Bases {
+		response.BaseIDs[i] = base.ID
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -611,4 +688,12 @@ func ResetUserPassword(w http.ResponseWriter, r *http.Request) {
 		"success": true,
 		"message": "密码重置成功",
 	})
+}
+
+// 添加辅助函数用于格式化时间指针
+func formatTimePointer(t *time.Time) string {
+	if t != nil {
+		return t.Format("2006-01-02")
+	}
+	return ""
 }

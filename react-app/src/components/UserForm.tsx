@@ -27,7 +27,7 @@ import {
   VisibilityOff
 } from '@mui/icons-material';
 import { User } from '@/api/AppDtos';
-import ApiClient from '@/api/ApiClient';
+import { ApiClient } from '@/api/ApiClient';
 
 interface UserFormProps {
   open: boolean;
@@ -35,6 +35,19 @@ interface UserFormProps {
   onSubmit: (userData: User) => Promise<void>;
   initial?: User;
   submitting?: boolean;
+}
+
+// 添加Base接口定义
+interface Base {
+  id: number;
+  name: string;
+  code: string;
+  location?: string;
+  description?: string;
+  status?: string;
+  created_by?: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 const UserForm: React.FC<UserFormProps> = ({
@@ -47,7 +60,8 @@ const UserForm: React.FC<UserFormProps> = ({
   const [formData, setFormData] = useState<User>({
     name: '',
     role: 'base_agent' as User['role'],
-    base: '',
+    bases: [], // 使用bases数组而不是单个base
+    base_ids: [], // 添加base_ids字段
     password: '',
     join_date: '',
     mobile: '',
@@ -59,14 +73,19 @@ const UserForm: React.FC<UserFormProps> = ({
   const [submitError, setSubmitError] = useState<string>('');
   const [showPassword, setShowPassword] = useState(false);
   const [availableBases, setAvailableBases] = useState<string[]>([]);
+  const [allBases, setAllBases] = useState<Base[]>([]); // 存储所有基地对象
+  
+  // 创建 ApiClient 实例
+  const apiClient = new ApiClient();
 
   // 加载可用基地列表
   useEffect(() => {
     const loadBases = async () => {
       try {
-        const bases = await ApiClient.base.list({ status: 'active' });
+        const bases = await apiClient.baseList();
         console.log('Loaded bases:', bases);
-        const baseNames = bases.map(base => base.name).filter(name => name);
+        setAllBases(bases); // 保存所有基地对象
+        const baseNames = bases.map((base: Base) => base.name).filter((name: string) => name);
         setAvailableBases(baseNames);
         console.log('Available base names:', baseNames);
       } catch (err) {
@@ -84,7 +103,7 @@ const UserForm: React.FC<UserFormProps> = ({
     if (open) {
       loadBases();
     }
-  }, [open]);
+  }, [open, apiClient]);
 
   useEffect(() => {
     if (initial) {
@@ -96,7 +115,8 @@ const UserForm: React.FC<UserFormProps> = ({
       setFormData({
         name: '',
         role: 'base_agent' as User['role'],
-        base: '',
+        bases: [], // 使用bases数组而不是单个base
+        base_ids: [], // 初始化base_ids字段
         password: '',
         join_date: '',
         mobile: '',
@@ -123,8 +143,8 @@ const UserForm: React.FC<UserFormProps> = ({
     }
 
     // 非管理员角色必须选择基地
-    if (formData.role && formData.role !== 'admin' && !formData.base) {
-      newErrors.base = '非管理员角色必须选择基地';
+    if (formData.role && formData.role !== 'admin' && (!formData.bases || formData.bases.length === 0)) {
+      newErrors.bases = '非管理员角色必须选择至少一个基地';
     }
 
     // 新增用户时密码必填，编辑时密码可选
@@ -147,16 +167,21 @@ const UserForm: React.FC<UserFormProps> = ({
     }
 
     try {
-      const submitData = { ...formData };
+      // 准备提交数据
+      const submitData: User = {
+        ...formData,
+        base_ids: formData.bases?.map(base => base.id).filter(id => id !== undefined) as number[] || [] // 从bases对象提取base_ids并过滤undefined值
+      };
       
       // 如果是管理员角色，清空基地字段
       if (submitData.role === 'admin') {
-        submitData.base = '';
+        submitData.bases = [];
+        submitData.base_ids = [];
       }
       
       // 如果是编辑且密码为空，则不提交密码字段
       if (initial?.id && !submitData.password) {
-        delete submitData.password;
+        delete (submitData as any).password;
       }
 
       await onSubmit(submitData);
@@ -166,7 +191,7 @@ const UserForm: React.FC<UserFormProps> = ({
     }
   };
 
-  const handleChange = (field: keyof User, value: string) => {
+  const handleChange = (field: keyof User, value: string | Base[]) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     // 清除相关字段的错误
     if (errors[field]) {
@@ -178,10 +203,20 @@ const UserForm: React.FC<UserFormProps> = ({
     setFormData(prev => ({
       ...prev,
       role: role as User['role'],
-      base: role === 'admin' ? '' : prev.base // 管理员清空基地
+      bases: role === 'admin' ? [] : prev.bases // 管理员清空基地
     }));
     if (errors.role) {
       setErrors(prev => ({ ...prev, role: '' }));
+    }
+  };
+
+  // 处理基地选择变化
+  const handleBaseChange = (baseNames: string[]) => {
+    // 根据基地名称找到对应的基地对象
+    const selectedBases = allBases.filter(base => baseNames.includes(base.name));
+    setFormData(prev => ({ ...prev, bases: selectedBases }));
+    if (errors.bases) {
+      setErrors(prev => ({ ...prev, bases: '' }));
     }
   };
 
@@ -259,13 +294,15 @@ const UserForm: React.FC<UserFormProps> = ({
 
             {formData.role && formData.role !== 'admin' && (
               <Grid item xs={12} sm={6}>
-                <FormControl fullWidth required error={!!errors.base}>
+                <FormControl fullWidth required error={!!errors.bases}>
                   <InputLabel>所属基地</InputLabel>
                   <Select
-                    value={formData.base || ''}
+                    multiple
+                    value={formData.bases?.map(base => base.name) || []}
                     label="所属基地"
-                    onChange={(e) => handleChange('base', e.target.value)}
+                    onChange={(e) => handleBaseChange(e.target.value as string[])}
                     disabled={submitting || availableBases.length === 0}
+                    renderValue={(selected) => (selected as string[]).join(', ')}
                   >
                     {availableBases.length === 0 ? (
                       <MenuItem value="" disabled>
@@ -279,9 +316,9 @@ const UserForm: React.FC<UserFormProps> = ({
                       ))
                     )}
                   </Select>
-                  {errors.base && (
+                  {errors.bases && (
                     <Box sx={{ color: 'error.main', fontSize: '0.75rem', mt: 0.5, ml: 1.75 }}>
-                      {errors.base}
+                      {errors.bases}
                     </Box>
                   )}
                   {availableBases.length === 0 && (

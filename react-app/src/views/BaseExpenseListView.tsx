@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import ApiClient from "@/api/ApiClient";
+import { ApiClient } from "@/api/ApiClient";
 import { Paper, Box, Button, Table, TableHead, TableRow, TableCell, TableBody, Dialog, Typography, Alert, Checkbox } from "@mui/material";
 import BaseExpenseForm from "@/components/BaseExpenseForm";
 import QueryFilter from "@/components/QueryFilter";
@@ -29,6 +29,9 @@ export default function BaseExpenseListView() {
   
   const [selectedItems, setSelectedItems] = useState<BaseExpense[]>([]);
   
+  // 创建 ApiClient 实例
+  const apiClient = new ApiClient();
+  
   const batchActions: BatchAction[] = [
     {
       id: 'delete',
@@ -52,11 +55,10 @@ export default function BaseExpenseListView() {
       };
       
       console.log('加载数据参数:', params);
-      const response = await ApiClient.expense.list(params);
+      const response = await apiClient.listExpense(params);
       console.log('API响应原始数据:', response);
-      console.log('response.data:', response.data);
-      console.log('response.data 类型:', typeof response.data);
-      console.log('response.data 是否为数组:', Array.isArray(response.data));
+      console.log('response 类型:', typeof response);
+      console.log('response 是否为数组:', Array.isArray(response));
       
       // 验证返回的数据结构
       if (!response || typeof response !== 'object') {
@@ -71,58 +73,34 @@ export default function BaseExpenseListView() {
         return;
       }
       
-      if (!response.data || !Array.isArray(response.data)) {
-        console.warn('response.data 不存在或不是数组:', response.data);
-        console.log('将直接使用response作为数组数据');
-        
-        // 如果response本身就是数组（后端直接返回数组）
-        if (Array.isArray(response)) {
-          console.log('后端直接返回数组，使用response作为数据');
-          setList(response);
-          setPagination({
-            total: response.length,
-            page: currentPage,
-            page_size: currentPageSize,
-            total_pages: Math.ceil(response.length / currentPageSize)
-          });
-          return;
-        } else {
-          // 无数据
-          setList([]);
-          setPagination({
-            total: 0,
-            page: currentPage,
-            page_size: currentPageSize,
-            total_pages: 0
-          });
-          return;
-        }
-      }
-      
-      // 正常情况：response.data 存在且是数组
-      const dataArray = response.data;
+      // 确保数据是数组格式
+      const dataArray = Array.isArray(response) ? response : [];
       console.log('获得数组数据，长度:', dataArray.length);
       
-      if (dataArray.length > 0) {
-        console.log('第一条记录详情:', dataArray[0]);
-        console.log('第一条记录字段检查:');
-        const first = dataArray[0];
-        console.log('  id:', first.id, '(类型:', typeof first.id, ')');
-        console.log('  date:', first.date, '(类型:', typeof first.date, ')');
-        console.log('  category:', first.category, '(类型:', typeof first.category, ')');
-        console.log('  amount:', first.amount, '(类型:', typeof first.amount, ')');
-        console.log('  base:', first.base, '(类型:', typeof first.base, ')');
-      }
+      // 类型转换：将ExpenseEntry[]转换为BaseExpense[]
+      const baseExpenses: BaseExpense[] = dataArray.map((item: any) => ({
+        id: item.id,
+        date: item.date,
+        category: item.category,  // 保持category对象
+        category_id: item.category_id,  // 添加category_id
+        amount: item.amount,
+        base: item.base || { id: 0, name: '', code: '' }, // 确保base字段不为undefined
+        detail: item.detail,
+        created_by: item.created_by,
+        creator_name: item.creator_name,
+        created_at: item.created_at,
+        updated_at: item.updated_at
+      }));
       
-      setList(dataArray);
+      setList(baseExpenses);
       
       // 计算分页信息
-      const actualTotal = response.total || dataArray.length;
+      const actualTotal = baseExpenses.length;
       setPagination({
         total: actualTotal,
-        page: response.page || currentPage,
-        page_size: response.page_size || currentPageSize,
-        total_pages: Math.ceil(actualTotal / (response.page_size || currentPageSize))
+        page: currentPage,
+        page_size: currentPageSize,
+        total_pages: Math.ceil(actualTotal / currentPageSize)
       });
     } catch (err) {
       console.error('加载数据失败:', err);
@@ -176,7 +154,7 @@ export default function BaseExpenseListView() {
       
       if (actionId === 'delete') {
         // 移除window.confirm，因为BatchOperations组件已经处理了确认对话框
-        await ApiClient.expense.batchDelete(validIds);
+        await apiClient.batchDeleteExpense(validIds);
         notification.showSuccess(`成功删除 ${validIds.length} 条开支记录`);
         
         // 清空选择状态
@@ -205,7 +183,7 @@ export default function BaseExpenseListView() {
   const getItemId = (item: BaseExpense) => item.id || 0;
   
   const getItemLabel = (item: BaseExpense) => {
-    return `${dayjs(item.date).format('MM-DD')} ${item.category} ¥${item.amount?.toFixed(2)}`;
+    return `${dayjs(item.date).format('MM-DD')} ${item.category?.name || '未知类别'} ¥${item.amount?.toFixed(2)}`;
   };
 
   useEffect(() => { load(); }, []);
@@ -294,9 +272,9 @@ export default function BaseExpenseListView() {
                       />
                     </TableCell>
                     <TableCell>{dayjs(row.date).format("YYYY-MM-DD")}</TableCell>
-                    <TableCell>{row.category}</TableCell>
+                    <TableCell>{row.category?.name || '未知类别'}</TableCell>
                     <TableCell>¥{row.amount?.toFixed(2)}</TableCell>
-                    <TableCell>{row.base}</TableCell>
+                    <TableCell>{row.base?.name || '-'}</TableCell>
                     <TableCell>{row.creator_name || '-'}</TableCell>
                     <TableCell>{row.detail || '-'}</TableCell>
                     <TableCell>
@@ -338,7 +316,13 @@ export default function BaseExpenseListView() {
       <Dialog open={!!edit} onClose={() => setEdit(null)} maxWidth="md" fullWidth>
         <Box p={3}>
           <BaseExpenseForm
-            initial={edit ?? undefined}
+            initial={edit ? {
+              date: edit.date,
+              category_id: edit.category_id,  // 修改为category_id
+              amount: edit.amount,
+              detail: edit.detail,
+              base: edit.base
+            } : undefined}
             submitting={submitting}
             onSubmit={async (v: any) => {
               try {
@@ -348,12 +332,12 @@ export default function BaseExpenseListView() {
                 let result;
                 if (edit?.id) {
                   console.log('编辑模式, ID:', edit.id);
-                  result = await ApiClient.expense.update(edit.id, v);
+                  result = await apiClient.updateExpense(edit.id, v);
                   console.log('编辑结果:', result);
                   notification.showSuccess('开支记录更新成功');
                 } else {
                   console.log('新增模式');
-                  result = await ApiClient.expense.create(v);
+                  result = await apiClient.createExpense(v);
                   console.log('新增结果:', result);
                   notification.showSuccess('开支记录创建成功');
                 }

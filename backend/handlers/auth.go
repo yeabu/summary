@@ -6,11 +6,12 @@ import (
 	"os"
 	"time"
 
+	"backend/db"
+	"backend/middleware"
+	"backend/models"
+
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
-	"backend/db"
-	"backend/models"
-	"backend/middleware"
 )
 
 type LoginReq struct {
@@ -18,17 +19,18 @@ type LoginReq struct {
 	Password string `json:"password"`
 }
 type LoginResp struct {
-	Token  string `json:"token"`
-	Role   string `json:"role"`
-	Base   string `json:"base"`
-	UserID uint   `json:"user_id"`
+	Token  string   `json:"token"`
+	Role   string   `json:"role"`
+	Bases  []string `json:"bases"` // 用户关联的基地代码列表
+	UserID uint     `json:"user_id"`
 }
-func GenerateToken(uid uint, role, base string) (string, error) {
+
+func GenerateToken(uid uint, role string, bases []string) (string, error) {
 	claims := jwt.MapClaims{
-		"uid":  uid,
-		"role": role,
-		"base": base,
-		"exp":  time.Now().Add(time.Hour * 72).Unix(),
+		"uid":   uid,
+		"role":  role,
+		"bases": bases,
+		"exp":   time.Now().Add(time.Hour * 72).Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(os.Getenv("JWT_SECRET")))
@@ -45,11 +47,21 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "密码错误", http.StatusUnauthorized)
 		return
 	}
-	token, _ := GenerateToken(user.ID, user.Role, user.Base)
+
+	// 预加载用户的基地信息
+	db.DB.Preload("Bases").First(&user, user.ID)
+
+	// 获取用户关联的基地代码列表
+	var baseCodes []string
+	for _, base := range user.Bases {
+		baseCodes = append(baseCodes, base.Code)
+	}
+
+	token, _ := GenerateToken(user.ID, user.Role, baseCodes)
 	json.NewEncoder(w).Encode(LoginResp{
 		Token:  token,
 		Role:   user.Role,
-		Base:   user.Base,
+		Bases:  baseCodes,
 		UserID: user.ID,
 	})
 }
@@ -58,6 +70,7 @@ type ChangePwdReq struct {
 	OldPassword string `json:"old_pwd"`
 	NewPassword string `json:"new_pwd"`
 }
+
 func ChangePassword(w http.ResponseWriter, r *http.Request) {
 	claims, err := middleware.ParseJWT(r)
 	if err != nil {

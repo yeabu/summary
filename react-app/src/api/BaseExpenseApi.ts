@@ -1,10 +1,12 @@
 import axios from "axios";
+import { Base, ExpenseCategory } from "@/api/AppDtos";
 
 export interface BaseExpense {
   id?: number;
-  base: string;
+  base: Base;
   date: string;
-  category: string;
+  category: ExpenseCategory;  // 保持category对象用于显示
+  category_id: number;        // 添加category_id字段用于提交
   amount: number;
   detail?: string;
   created_by?: number;
@@ -14,7 +16,7 @@ export interface BaseExpense {
 }
 
 // 新增
-export const createExpense = async (data: Omit<BaseExpense, 'id'>) => {
+export const createExpense = async (data: Omit<BaseExpense, 'id' | 'category'>) => {
   return axios.post("/api/expense/create", data);
 };
 
@@ -22,13 +24,14 @@ export const createExpense = async (data: Omit<BaseExpense, 'id'>) => {
 export const fetchExpenseList = async (params: {
   base?: string;
   category?: string;
+  category_id?: number;      // 添加category_id筛选参数
   month?: string; // '2024-06'
 }) => {
   return axios.get("/api/expense/list", { params });
 };
 
 // 编辑（id做主键，实际需后端url处理）
-export const updateExpense = async (id: number, data: Partial<BaseExpense>) => {
+export const updateExpense = async (id: number, data: Partial<Omit<BaseExpense, 'id' | 'category'>>) => {
   return axios.post(`/api/expense/update?id=${id}`, data);
 };
 

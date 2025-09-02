@@ -16,7 +16,7 @@ import {
   Autocomplete
 } from '@mui/material';
 import { BaseSection, Base, User } from '@/api/AppDtos';
-import ApiClient from '@/api/ApiClient';
+import { ApiClient } from '@/api/ApiClient';
 
 interface BaseSectionFormProps {
   open: boolean;
@@ -50,6 +50,9 @@ const BaseSectionForm: React.FC<BaseSectionFormProps> = ({
   const [captains, setCaptains] = useState<User[]>([]);
   const [loadingBases, setLoadingBases] = useState(false);
   const [loadingCaptains, setLoadingCaptains] = useState(false);
+  
+  // 创建 ApiClient 实例
+  const apiClient = new ApiClient();
 
   // 加载基地和队长数据
   useEffect(() => {
@@ -61,12 +64,28 @@ const BaseSectionForm: React.FC<BaseSectionFormProps> = ({
       
       try {
         // 加载所有基地
-        const baseList = await ApiClient.base.list({});
+        const baseList = await apiClient.baseList();
         setBases(baseList || []);
         
         // 加载所有队长（captain角色的用户）
-        const userList = await ApiClient.userManagement.list({ role: 'captain' });
-        setCaptains(userList || []);
+        const userList = await apiClient.userList();
+        // 修复类型不匹配问题：将ApiClient.User[]转换为AppDtos.User[]
+        const appDtosUsers: User[] = userList.map(user => ({
+          id: user.id,
+          name: user.name,
+          role: user.role as 'admin' | 'base_agent' | 'captain' | 'factory_manager',
+          bases: user.bases || [], // 使用bases而不是base
+          base_ids: user.base_ids || [], // 添加base_ids字段
+          join_date: user.join_date,
+          mobile: user.mobile,
+          passport_number: user.passport_number,
+          visa_expiry_date: user.visa_expiry_date,
+          created_at: user.created_at,
+          updated_at: user.updated_at
+        }));
+        // 修复类型不匹配问题：过滤出captain角色的用户
+        const captains = appDtosUsers.filter(user => user.role === 'captain') || [];
+        setCaptains(captains);
       } catch (err) {
         console.error('Load data error:', err);
       } finally {

@@ -1,31 +1,17 @@
-import React, { useState } from "react";
-import { TextField, MenuItem, Button, Box, Typography } from "@mui/material";
+import React, { useState, useEffect } from "react";
+import { TextField, MenuItem, Button, Box, Typography, FormControl, InputLabel, Select, SelectChangeEvent } from "@mui/material";
 import dayjs from 'dayjs';
 import useAuthStore from '@/auth/AuthStore';
-
-const categories = ["伙食费", "修车费", "电费", "加油费", "材料费"];
-
-// 基地列表（根据API文档）
-const baseList = [
-  "北京基地",
-  "上海基地",
-  "广州基地",
-  "深圳基地",
-  "杭州基地",
-  "南京基地",
-  "成都基地",
-  "武汉基地",
-  "西安基地",
-  "青岛基地"
-];
+import { Base, ExpenseCategory } from '@/api/AppDtos';
+import { ApiClient } from '@/api/ApiClient';
 
 export interface ExpenseFormProps {
   initial?: Partial<{
     date: string;
-    category: string;
+    category_id: number;  // 修改为category_id
     amount: number;
     detail: string;
-    base: string;
+    base: Base;
   }>;
   onSubmit: (v: any) => void;
   submitting?: boolean;
@@ -34,15 +20,64 @@ export interface ExpenseFormProps {
 export default function BaseExpenseForm({ initial, onSubmit, submitting }: ExpenseFormProps) {
   const user = useAuthStore((state) => state.user);
   const isAdmin = user?.role === 'admin';
-  const userBase = user?.base || '';
   
+  const [bases, setBases] = useState<Base[]>([]);
+  const [categories, setCategories] = useState<ExpenseCategory[]>([]); // 费用类别状态
   const [data, setData] = useState({
     date: initial?.date ?? dayjs().format("YYYY-MM-DD"),
-    category: initial?.category ?? "",
+    category_id: initial?.category_id || 0,  // 修改为category_id
     amount: initial?.amount ?? 0,
     detail: initial?.detail ?? "",
-    base: initial?.base ?? (isAdmin ? "" : userBase) // admin用户默认空，基地代理用户使用自己的基地
+    base_id: initial?.base?.id || 0
   });
+
+  // 加载基地列表
+  useEffect(() => {
+    const loadBases = async () => {
+      if (isAdmin) {
+        try {
+          const apiClient = new ApiClient();
+          const baseList = await apiClient.baseList();
+          setBases(baseList);
+          // 如果是管理员且没有初始基地，设置默认值为第一个基地
+          if (baseList.length > 0 && !initial?.base?.id) {
+            setData(prev => ({ ...prev, base_id: baseList[0].id }));
+          }
+        } catch (error) {
+          console.error('加载基地列表失败:', error);
+        }
+      }
+    };
+    
+    loadBases();
+  }, [isAdmin, initial?.base?.id]);
+
+  // 加载费用类别列表
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        const apiClient = new ApiClient();
+        const categoryList = await apiClient.listExpenseCategories('active'); // 只加载有效的类别
+        setCategories(categoryList);
+        // 如果没有初始类别且有类别列表，设置默认值为第一个类别
+        if (!initial?.category_id && categoryList.length > 0) {
+          setData(prev => ({ ...prev, category_id: categoryList[0].id }));
+        }
+      } catch (error) {
+        console.error('加载费用类别列表失败:', error);
+      }
+    };
+    
+    loadCategories();
+  }, [initial?.category_id]);
+
+  const handleBaseChange = (event: SelectChangeEvent<number>) => {
+    setData(prev => ({ ...prev, base_id: Number(event.target.value) }));
+  };
+
+  const handleCategoryChange = (event: SelectChangeEvent<number>) => {
+    setData(prev => ({ ...prev, category_id: Number(event.target.value) }));
+  };
 
   return (
     <Box component="form"
@@ -51,7 +86,15 @@ export default function BaseExpenseForm({ initial, onSubmit, submitting }: Expen
       }}
       onSubmit={e => {
         e.preventDefault();
-        onSubmit(data);
+        // 提交逻辑，传递正确的数据结构
+        const submitData = {
+          date: data.date,
+          category_id: data.category_id,  // 修改为category_id
+          amount: data.amount,
+          detail: data.detail,
+          base_id: data.base_id
+        };
+        onSubmit(submitData);
       }}
     >
       <Typography variant="h6" gutterBottom>
@@ -69,41 +112,47 @@ export default function BaseExpenseForm({ initial, onSubmit, submitting }: Expen
       
       {/* 基地选择：只有admin用户才显示 */}
       {isAdmin && (
-        <TextField
-          label="所属基地"
-          select
-          value={data.base}
-          onChange={e => setData(v => ({ ...v, base: e.target.value }))}
-          required
-          helperText="请选择费用所属的基地"
-        >
-          {baseList.map(base =>
-            <MenuItem value={base} key={base}>{base}</MenuItem>
-          )}
-        </TextField>
+        <FormControl fullWidth required>
+          <InputLabel>所属基地</InputLabel>
+          <Select
+            value={data.base_id || (bases.length > 0 ? bases[0].id : '')}
+            onChange={handleBaseChange}
+            label="所属基地"
+          >
+            {bases.map(base => (
+              <MenuItem key={base.id} value={base.id}>
+                {base.name}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
       )}
       
       {/* 基地代理用户显示当前基地（只读） */}
-      {!isAdmin && (
+      {!isAdmin && user?.base && (
         <TextField
           label="所属基地"
-          value={userBase}
+          value={user.base}
           disabled
           helperText="基地代理只能为自己的基地添加开支记录"
         />
       )}
       
-      <TextField
-        label="费用类别"
-        select
-        value={data.category}
-        onChange={e => setData(v => ({ ...v, category: e.target.value }))}
-        required
-      >
-        {categories.map(c =>
-          <MenuItem value={c} key={c}>{c}</MenuItem>
-        )}
-      </TextField>
+      {/* 费用类别选择 */}
+      <FormControl fullWidth required>
+        <InputLabel>费用类别</InputLabel>
+        <Select
+          value={data.category_id || (categories.length > 0 ? categories[0].id : '')}
+          onChange={handleCategoryChange}
+          label="费用类别"
+        >
+          {categories.map(category => (
+            <MenuItem key={category.id} value={category.id}>
+              {category.name}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
       
       <TextField
         label="金额"

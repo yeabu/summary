@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import ApiClient from "@/api/ApiClient";
 import { 
   Paper, 
   Typography, 
@@ -26,6 +25,7 @@ import { BarChartComponent, PieChartComponent } from "../components/Charts";
 import ExportButton from "../components/ExportButton";
 import { useNotification } from "../components/NotificationProvider";
 import dayjs from "dayjs";
+import { ApiClient } from "@/api/ApiClient";
 
 interface ExpenseStats {
   base: string;
@@ -41,13 +41,17 @@ export default function BaseExpenseStatsView() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [viewMode, setViewMode] = useState<'table' | 'charts'>('charts');
+  
+  // 创建 ApiClient 实例
+  const apiClient = new ApiClient();
 
   const loadStats = async () => {
     setLoading(true);
     setError('');
     try {
       console.log('加载统计数据, 月份:', month);
-      const response = await ApiClient.expense.stats(month);
+      // 修复：传递正确的month参数而不是start_date和end_date
+      const response = await apiClient.statExpense({ month: month });
       console.log('统计API原始返回:', response);
       
       // 后端直接返回数组，不是 {data: []} 格式
@@ -243,82 +247,15 @@ export default function BaseExpenseStatsView() {
         <TableBody>
           {safeData.map((item, idx) =>
             <TableRow key={idx} hover>
-              <TableCell>{item?.base || '-'}</TableCell>
-              <TableCell>{item?.category || '-'}</TableCell>
-              <TableCell>{item?.month || '-'}</TableCell>
-              <TableCell align="right">￥{item?.total?.toFixed(2) || '0.00'}</TableCell>
-            </TableRow>
-          )}
-          {safeData.length === 0 && !loading && (
-            <TableRow>
-              <TableCell colSpan={4} align="center" sx={{ py: 4 }}>
-                <Typography color="text.secondary">
-                  该月份暂无统计数据
-                </Typography>
-              </TableCell>
+              <TableCell>{item.base}</TableCell>
+              <TableCell>{item.category}</TableCell>
+              <TableCell>{item.month}</TableCell>
+              <TableCell align="right">￥{item.total?.toFixed(2)}</TableCell>
             </TableRow>
           )}
         </TableBody>
       </Table>
-
-      {/* 按类别统计 */}
-      {Object.keys(categoryTotals).length > 0 && (
-        <>
-          <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
-            按类别统计
-          </Typography>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>类别</TableCell>
-                <TableCell align="right">总金额（元）</TableCell>
-                <TableCell align="right">占比</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {Object.entries(categoryTotals).map(([category, total]) => (
-                <TableRow key={category}>
-                  <TableCell>{category}</TableCell>
-                  <TableCell align="right">￥{total.toFixed(2)}</TableCell>
-                  <TableCell align="right">
-                    {totalAmount > 0 ? ((total / totalAmount) * 100).toFixed(1) : '0'}%
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </>
-      )}
-
-      {/* 按基地统计 */}
-      {Object.keys(baseTotals).length > 0 && (
-        <>
-          <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
-            按基地统计
-          </Typography>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>基地</TableCell>
-                <TableCell align="right">总金额（元）</TableCell>
-                <TableCell align="right">占比</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {Object.entries(baseTotals).map(([base, total]) => (
-                <TableRow key={base}>
-                  <TableCell>{base}</TableCell>
-                  <TableCell align="right">￥{total.toFixed(2)}</TableCell>
-                  <TableCell align="right">
-                    {totalAmount > 0 ? ((total / totalAmount) * 100).toFixed(1) : '0'}%
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </>
-      )}
-        </Paper>
+    </Paper>
       )}
     </Box>
   );

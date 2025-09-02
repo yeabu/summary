@@ -34,11 +34,11 @@ import {
   People as PeopleIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import ApiClient from '@/api/ApiClient';
+import { Base } from '@/api/AppDtos';
 import BaseForm from '@/components/BaseForm';
 import BatchOperations, { BatchAction } from '@/components/BatchOperations';
 import { useNotification } from '@/components/NotificationProvider';
-import { Base } from '@/api/AppDtos';
+import { ApiClient } from '@/api/ApiClient';
 
 const BaseManagementView: React.FC = () => {
   const navigate = useNavigate();
@@ -67,6 +67,9 @@ const BaseManagementView: React.FC = () => {
       dangerous: true
     }
   ];
+  
+  // 创建 ApiClient 实例
+  const apiClient = new ApiClient();
 
   const loadBases = async () => {
     setLoading(true);
@@ -80,7 +83,8 @@ const BaseManagementView: React.FC = () => {
         params.status = statusFilter;
       }
 
-      const response = await ApiClient.base.list(params);
+      // 使用实例方法而不是静态方法
+      const response = await apiClient.baseList();
       setBases(response || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载基地列表失败');
@@ -116,11 +120,23 @@ const BaseManagementView: React.FC = () => {
   const handleSubmit = async (baseData: Base) => {
     setSubmitting(true);
     try {
+      // 创建一个符合ApiClient.Base类型的新对象
+      const apiBaseData = {
+        name: baseData.name,
+        code: baseData.code,
+        location: baseData.location,
+        description: baseData.description,
+        status: baseData.status || 'active', // 确保status字段不为undefined
+        created_by: 1 // 添加created_by字段，这里使用默认值1，实际应该从认证信息中获取
+      };
+      
       if (editingBase?.id) {
-        await ApiClient.base.update(editingBase.id, baseData);
+        // 使用实例方法而不是静态方法
+        await apiClient.baseUpdate(editingBase.id, apiBaseData);
         notification.showSuccess('基地信息更新成功');
       } else {
-        await ApiClient.base.create(baseData);
+        // 使用实例方法而不是静态方法
+        await apiClient.baseCreate(apiBaseData);
         notification.showSuccess('基地创建成功');
       }
       setEditDialogOpen(false);
@@ -141,7 +157,8 @@ const BaseManagementView: React.FC = () => {
     }
     
     try {
-      await ApiClient.base.delete(id);
+      // 使用实例方法而不是静态方法
+      await apiClient.baseDelete(id);
       notification.showSuccess('删除成功');
       loadBases();
       // 清除选中项中被删除的项
@@ -168,7 +185,8 @@ const BaseManagementView: React.FC = () => {
       
       if (actionId === 'delete') {
         console.log('Calling batchDelete with IDs:', ids);
-        await ApiClient.base.batchDelete(ids);
+        // 使用实例方法而不是静态方法
+        await apiClient.baseBatchDelete(ids);
         notification.showSuccess(`成功删除 ${ids.length} 个基地`);
         // 重新加载数据
         loadBases();
@@ -280,12 +298,9 @@ const BaseManagementView: React.FC = () => {
           <MenuItem value="active">启用</MenuItem>
           <MenuItem value="inactive">停用</MenuItem>
         </TextField>
-        <Button variant="outlined" onClick={handleSearch} disabled={loading}>
-          搜索
-        </Button>
       </Box>
-      
-      {/* 批量操作 */}
+
+      {/* 批量操作栏 */}
       <BatchOperations
         allItems={bases}
         selectedItems={selectedItems}
@@ -295,114 +310,83 @@ const BaseManagementView: React.FC = () => {
         actions={batchActions}
         onBatchAction={handleBatchAction}
         disabled={loading}
-        showSelectAll={true}
       />
 
+      {/* 基地列表 */}
       <Table>
         <TableHead>
           <TableRow>
             <TableCell padding="checkbox">
-              {/* 留空，由BatchOperations组件管理全选 */}
+              {/* 批量操作的全选复选框由BatchOperations组件处理 */}
             </TableCell>
             <TableCell>基地名称</TableCell>
             <TableCell>基地代码</TableCell>
             <TableCell>位置</TableCell>
             <TableCell>状态</TableCell>
-            <TableCell>描述</TableCell>
-            <TableCell>操作</TableCell>
+            <TableCell>创建时间</TableCell>
+            <TableCell align="right">操作</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
-          {bases.map((base) => {
-            const isSelected = selectedItems.some(item => item.id === base.id);
-            return (
-              <TableRow key={base.id} hover selected={isSelected}>
-                <TableCell padding="checkbox">
-                  <Checkbox
-                    checked={isSelected}
-                    onChange={(e) => handleItemSelect(base, e.target.checked)}
-                    color="primary"
-                  />
-                </TableCell>
-                <TableCell>
-                  <Typography variant="body2" fontWeight="medium">
-                    {base.name}
-                  </Typography>
-                </TableCell>
-                <TableCell>
-                  <Typography variant="body2" fontFamily="monospace">
-                    {base.code}
-                  </Typography>
-                </TableCell>
-                <TableCell>{base.location || '-'}</TableCell>
-                <TableCell>{getStatusChip(base.status)}</TableCell>
-                <TableCell>
-                  <Typography variant="body2" sx={{ 
-                    maxWidth: 200, 
-                    overflow: 'hidden', 
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}>
-                    {base.description || '-'}
-                  </Typography>
-                </TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Tooltip title="编辑">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleEdit(base)}
-                        color="primary"
-                      >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="管理分区">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleManageSections(base)}
-                        color="secondary"
-                      >
-                        <PeopleIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="删除">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDelete(base.id!)}
-                        color="error"
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-          {bases.length === 0 && !loading && (
+          {loading ? (
             <TableRow>
-              <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
-                <Typography color="text.secondary">
-                  暂无基地记录
-                </Typography>
+              <TableCell colSpan={7} align="center">
+                加载中...
               </TableCell>
             </TableRow>
+          ) : bases.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={7} align="center">
+                暂无基地数据
+              </TableCell>
+            </TableRow>
+          ) : (
+            bases.map((base) => (
+              <TableRow key={base.id} hover>
+                <TableCell padding="checkbox">
+                  <Checkbox
+                    checked={selectedItems.some(item => item.id === base.id)}
+                    onChange={(e) => handleItemSelect(base, e.target.checked)}
+                  />
+                </TableCell>
+                <TableCell>{base.name}</TableCell>
+                <TableCell>{base.code}</TableCell>
+                <TableCell>{base.location || '-'}</TableCell>
+                <TableCell>{getStatusChip(base.status)}</TableCell>
+                <TableCell>{base.created_at ? new Date(base.created_at).toLocaleDateString() : '-'}</TableCell>
+                <TableCell align="right">
+                  <Tooltip title="管理分区">
+                    <IconButton size="small" onClick={() => handleManageSections(base)}>
+                      <PeopleIcon />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="编辑">
+                    <IconButton size="small" onClick={() => handleEdit(base)}>
+                      <EditIcon />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="删除">
+                    <IconButton size="small" onClick={() => base.id && handleDelete(base.id)}>
+                      <DeleteIcon />
+                    </IconButton>
+                  </Tooltip>
+                </TableCell>
+              </TableRow>
+            ))
           )}
         </TableBody>
       </Table>
 
       {/* 编辑对话框 */}
-      <BaseForm
-        open={editDialogOpen}
-        onClose={() => {
-          setEditDialogOpen(false);
-          setEditingBase(null);
-        }}
-        onSubmit={handleSubmit}
-        initial={editingBase || undefined}
-        submitting={submitting}
-      />
+      <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="sm" fullWidth>
+        <BaseForm
+          open={editDialogOpen}
+          initial={editingBase || undefined}
+          onSubmit={handleSubmit}
+          onClose={() => setEditDialogOpen(false)}
+          submitting={submitting}
+        />
+      </Dialog>
     </Paper>
   );
 };

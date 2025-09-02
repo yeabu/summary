@@ -36,11 +36,11 @@ import {
   Refresh as RefreshIcon
 } from '@mui/icons-material';
 import { useLocation, useNavigate } from 'react-router-dom';
-import ApiClient from '@/api/ApiClient';
+import { BaseSection, Base } from '@/api/AppDtos';
 import BaseSectionForm from '@/components/BaseSectionForm';
 import BatchOperations, { BatchAction } from '@/components/BatchOperations';
 import { useNotification } from '@/components/NotificationProvider';
-import { BaseSection, Base } from '@/api/AppDtos';
+import { ApiClient } from '@/api/ApiClient';
 
 const BaseSectionManagementView: React.FC = () => {
   const location = useLocation();
@@ -73,11 +73,15 @@ const BaseSectionManagementView: React.FC = () => {
       dangerous: true
     }
   ];
+  
+  // 创建 ApiClient 实例
+  const apiClient = new ApiClient();
 
   // 加载基地数据
   const loadBases = async () => {
     try {
-      const baseList = await ApiClient.base.list({});
+      // 使用实例方法而不是静态方法
+      const baseList = await apiClient.baseList();
       setBases(baseList || []);
     } catch (err) {
       console.error('Load bases error:', err);
@@ -96,7 +100,8 @@ const BaseSectionManagementView: React.FC = () => {
         params.base_id = baseFilter;
       }
 
-      const response = await ApiClient.baseSection.list(params);
+      // 使用实例方法而不是静态方法
+      const response = await apiClient.sectionList(baseFilter ? parseInt(baseFilter) : undefined);
       setSections(response || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载分区列表失败');
@@ -143,10 +148,12 @@ const BaseSectionManagementView: React.FC = () => {
     setSubmitting(true);
     try {
       if (editingSection?.id) {
-        await ApiClient.baseSection.update(editingSection.id, sectionData);
+        // 使用实例方法而不是静态方法
+        await apiClient.sectionUpdate(editingSection.id, sectionData);
         notification.showSuccess('分区信息更新成功');
       } else {
-        await ApiClient.baseSection.create(sectionData);
+        // 使用实例方法而不是静态方法
+        await apiClient.sectionCreate(sectionData);
         notification.showSuccess('分区创建成功');
       }
       setEditDialogOpen(false);
@@ -167,7 +174,8 @@ const BaseSectionManagementView: React.FC = () => {
     }
     
     try {
-      await ApiClient.baseSection.delete(id);
+      // 使用实例方法而不是静态方法
+      await apiClient.sectionDelete(id);
       notification.showSuccess('删除成功');
       loadSections();
       // 清除选中项中被删除的项
@@ -194,7 +202,8 @@ const BaseSectionManagementView: React.FC = () => {
       
       if (actionId === 'delete') {
         // 注意：当前API没有提供批量删除分区的接口，需要逐个删除
-        const deletePromises = ids.map(id => ApiClient.baseSection.delete(id));
+        // 使用实例方法而不是静态方法
+        const deletePromises = ids.map(id => apiClient.sectionDelete(id));
         await Promise.all(deletePromises);
         notification.showSuccess(`成功删除 ${ids.length} 个分区`);
         // 重新加载数据
@@ -278,7 +287,7 @@ const BaseSectionManagementView: React.FC = () => {
       )}
 
       {/* 搜索筛选栏 */}
-      <Box sx={{ mb: 2, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+      <Box sx={{ mb: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
         <TextField
           label="搜索分区名称"
           size="small"
@@ -299,23 +308,20 @@ const BaseSectionManagementView: React.FC = () => {
           <InputLabel>基地筛选</InputLabel>
           <Select
             value={baseFilter}
+            onChange={(e) => setBaseFilter(e.target.value as string)}
             label="基地筛选"
-            onChange={(e) => setBaseFilter(e.target.value)}
           >
             <MenuItem value="">全部基地</MenuItem>
-            {bases.map((base) => (
-              <MenuItem key={base.id} value={base.id}>
+            {bases.map(base => (
+              <MenuItem key={base.id} value={base.id?.toString()}>
                 {base.name}
               </MenuItem>
             ))}
           </Select>
         </FormControl>
-        <Button variant="outlined" onClick={handleSearch} disabled={loading}>
-          搜索
-        </Button>
       </Box>
-      
-      {/* 批量操作 */}
+
+      {/* 批量操作栏 */}
       <BatchOperations
         allItems={sections}
         selectedItems={selectedItems}
@@ -325,112 +331,79 @@ const BaseSectionManagementView: React.FC = () => {
         actions={batchActions}
         onBatchAction={handleBatchAction}
         disabled={loading}
-        showSelectAll={true}
       />
 
+      {/* 分区列表 */}
       <Table>
         <TableHead>
           <TableRow>
             <TableCell padding="checkbox">
-              {/* 留空，由BatchOperations组件管理全选 */}
+              {/* 批量操作的全选复选框由BatchOperations组件处理 */}
             </TableCell>
             <TableCell>分区名称</TableCell>
             <TableCell>所属基地</TableCell>
-            <TableCell>分区队长</TableCell>
+            <TableCell>队长</TableCell>
             <TableCell>描述</TableCell>
-            <TableCell>操作</TableCell>
+            <TableCell>创建时间</TableCell>
+            <TableCell align="right">操作</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
-          {sections.map((section) => {
-            const isSelected = selectedItems.some(item => item.id === section.id);
-            return (
-              <TableRow key={section.id} hover selected={isSelected}>
-                <TableCell padding="checkbox">
-                  <Checkbox
-                    checked={isSelected}
-                    onChange={(e) => handleItemSelect(section, e.target.checked)}
-                    color="primary"
-                  />
-                </TableCell>
-                <TableCell>
-                  <Typography variant="body2" fontWeight="medium">
-                    {section.name}
-                  </Typography>
-                </TableCell>
-                <TableCell>
-                  <Typography variant="body2">
-                    {section.base_name}
-                  </Typography>
-                </TableCell>
-                <TableCell>
-                  {section.leader_name ? (
-                    <Chip label={section.leader_name} size="small" color="primary" variant="outlined" />
-                  ) : (
-                    <Typography variant="body2" color="text.secondary">
-                      未分配
-                    </Typography>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <Typography variant="body2" sx={{ 
-                    maxWidth: 200, 
-                    overflow: 'hidden', 
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}>
-                    {section.description || '-'}
-                  </Typography>
-                </TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Tooltip title="编辑">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleEdit(section)}
-                        color="primary"
-                      >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="删除">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDelete(section.id!)}
-                        color="error"
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-          {sections.length === 0 && !loading && (
+          {loading ? (
             <TableRow>
-              <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
-                <Typography color="text.secondary">
-                  暂无分区记录
-                </Typography>
+              <TableCell colSpan={7} align="center">
+                加载中...
               </TableCell>
             </TableRow>
+          ) : sections.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={7} align="center">
+                暂无分区数据
+              </TableCell>
+            </TableRow>
+          ) : (
+            sections.map((section) => (
+              <TableRow key={section.id} hover>
+                <TableCell padding="checkbox">
+                  <Checkbox
+                    checked={selectedItems.some(item => item.id === section.id)}
+                    onChange={(e) => handleItemSelect(section, e.target.checked)}
+                  />
+                </TableCell>
+                <TableCell>{section.name}</TableCell>
+                <TableCell>{section.base_name || '-'}</TableCell>
+                <TableCell>{section.leader_name || '-'}</TableCell>
+                <TableCell>{section.description || '-'}</TableCell>
+                <TableCell>{section.created_at ? new Date(section.created_at).toLocaleDateString() : '-'}</TableCell>
+                <TableCell align="right">
+                  <Tooltip title="编辑">
+                    <IconButton size="small" onClick={() => handleEdit(section)}>
+                      <EditIcon />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="删除">
+                    <IconButton size="small" onClick={() => section.id && handleDelete(section.id)}>
+                      <DeleteIcon />
+                    </IconButton>
+                  </Tooltip>
+                </TableCell>
+              </TableRow>
+            ))
           )}
         </TableBody>
       </Table>
 
       {/* 编辑对话框 */}
-      <BaseSectionForm
-        open={editDialogOpen}
-        onClose={() => {
-          setEditDialogOpen(false);
-          setEditingSection(null);
-        }}
-        onSubmit={handleSubmit}
-        initial={editingSection || undefined}
-        submitting={submitting}
-        defaultBaseId={baseFilter ? Number(baseFilter) : undefined} // 传递默认基地ID
-      />
+      <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="sm" fullWidth>
+        <BaseSectionForm
+          open={editDialogOpen}
+          initial={editingSection || undefined}
+          onSubmit={handleSubmit}
+          onClose={() => setEditDialogOpen(false)}
+          submitting={submitting}
+          defaultBaseId={baseFilter ? parseInt(baseFilter) : undefined}
+        />
+      </Dialog>
     </Paper>
   );
 };

@@ -13,6 +13,8 @@ import PurchaseListView from '../views/PurchaseListView';
 import BaseManagementView from '../views/BaseManagementView';
 import BaseSectionManagementView from '../views/BaseSectionManagementView';
 import UserManagementView from '../views/UserManagementView';
+import PayableUnifiedView from '../views/PayableUnifiedView';
+import SupplierManagementView from '../views/SupplierManagementView';
 import { ADMIN_ROLE } from '../utils/roles';
 
 /**
@@ -34,6 +36,11 @@ const App = () => {
             <Route path="profile" element={<ProfileView />} />
             {/* 基地日常开支（所有登录用户，有录入/查看权限） */}
             <Route path="expense/list" element={<BaseExpenseListView />} />
+            {/* 应付款管理（合并了原来的应付款管理和欠款统计功能） */}
+            <Route path="payable/list" element={<PayableUnifiedView />} />
+            <Route path="payable/stats" element={<PayableUnifiedView />} />
+            {/* 供应商管理 */}
+            <Route path="supplier/management" element={<SupplierManagementView />} />
             {/* ONLY admin 见统计分析和采购管理，采用roles嵌套路由 */}
             <Route element={<ProtectedRoute roles={[ADMIN_ROLE]} />}> 
               <Route path="expense/stats" element={<BaseExpenseStatsView />} />

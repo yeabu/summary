@@ -1,11 +1,13 @@
 import { create } from 'zustand';
-import ApiClient from '../api/ApiClient';
+import { LoginRequest, LoginResponse, ChangePasswordRequest } from '../api/AppDtos';
 
 interface User {
   user_id: number;
   name: string;
   role: string;
-  base?: string;
+  bases?: string[];  // 用户关联的基地代码列表
+  base?: string;     // 默认基地（向后兼容）
+  base_id?: number;  // 添加基地ID属性
 }
 
 interface AuthState {
@@ -37,17 +39,36 @@ const useAuthStore = create<AuthState>((set, get) => ({
 
   async signIn(name, password) {
     try {
-      const result = await ApiClient.login(name, password);
+      // 创建登录请求对象
+      const loginRequest: LoginRequest = { name, password };
       
-      if (result.token && result.user_id) {
+      // 直接调用登录API，不使用ApiClient类
+      const apiUrl = import.meta.env.VITE_API_URL;
+      const response = await fetch(`${apiUrl}/api/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(loginRequest)
+      });
+
+      if (!response.ok) {
+        throw new Error('登录失败');
+      }
+
+      const data: LoginResponse = await response.json();
+
+      if (data.token && data.user_id) {
         const user: User = {
-          user_id: result.user_id,
+          user_id: data.user_id,
           name: name,
-          role: result.role,
-          base: result.base
+          role: data.role,
+          bases: data.bases,
+          base: data.bases && data.bases.length > 0 ? data.bases[0] : undefined
+          // 注意：登录响应中没有base_id，所以不设置
         };
         
-        get().setSession(result.token, user);
+        get().setSession(data.token, user);
       } else {
         throw new Error('登录失败：无效的响应数据');
       }
@@ -64,7 +85,29 @@ const useAuthStore = create<AuthState>((set, get) => ({
 
   async changePassword(oldPwd, newPwd) {
     try {
-      await ApiClient.user.changePassword(oldPwd, newPwd);
+      // 实现修改密码逻辑
+      const changePwdRequest: ChangePasswordRequest = { old_pwd: oldPwd, new_pwd: newPwd };
+      
+      // 获取当前 token
+      const token = get().token;
+      if (!token) {
+        throw new Error('用户未登录');
+      }
+      
+      // 直接调用修改密码API，不使用ApiClient类
+      const apiUrl = import.meta.env.VITE_API_URL;
+      const response = await fetch(`${apiUrl}/api/user/change-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(changePwdRequest)
+      });
+
+      if (!response.ok) {
+        throw new Error('密码修改失败');
+      }
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : '密码修改失败');
     }

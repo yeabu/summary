@@ -38,16 +38,17 @@ import {
   MoreVert as MoreVertIcon,
   VpnKey as ResetPasswordIcon
 } from '@mui/icons-material';
-import ApiClient from '@/api/ApiClient';
+import { User, Base } from '@/api/AppDtos'; // 添加Base类型导入
 import UserForm from '@/components/UserForm';
 import BatchOperations, { BatchAction } from '@/components/BatchOperations';
 import { useNotification } from '@/components/NotificationProvider';
-import { User } from '@/api/AppDtos';
+import { ApiClient } from '@/api/ApiClient';
 
 const UserManagementView: React.FC = () => {
   const notification = useNotification();
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
+  const [bases, setBases] = useState<Base[]>([]); // 添加基地状态
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -81,6 +82,18 @@ const UserManagementView: React.FC = () => {
       dangerous: true
     }
   ];
+  
+  // 创建 ApiClient 实例
+  const apiClient = new ApiClient();
+
+  const loadBases = async () => {
+    try {
+      const response = await apiClient.baseList();
+      setBases(response || []);
+    } catch (err) {
+      console.error('Load bases error:', err);
+    }
+  };
 
   const loadUsers = async () => {
     setLoading(true);
@@ -94,11 +107,26 @@ const UserManagementView: React.FC = () => {
         params.role = roleFilter;
       }
       if (baseFilter) {
-        params.base = baseFilter;
+        params.base_id = bases.find((b: Base) => b.name === baseFilter)?.id; // 使用base_id而不是base
       }
 
-      const response = await ApiClient.userManagement.list(params);
-      setUsers(response || []);
+      // 使用实例方法而不是静态方法
+      const response = await apiClient.userList();
+      // 类型转换：将ApiClient.User[]转换为AppDtos.User[]
+      const appDtosUsers: User[] = response.map(user => ({
+        id: user.id,
+        name: user.name,
+        role: user.role as 'admin' | 'base_agent' | 'captain' | 'factory_manager',
+        bases: user.bases || [], // 使用bases字段而不是base字段
+        base_ids: user.base_ids || [], // 添加base_ids字段
+        join_date: user.join_date,
+        mobile: user.mobile,
+        passport_number: user.passport_number,
+        visa_expiry_date: user.visa_expiry_date,
+        created_at: user.created_at,
+        updated_at: user.updated_at
+      }));
+      setUsers(appDtosUsers || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载用户列表失败');
       console.error('Load users error:', err);
@@ -109,6 +137,7 @@ const UserManagementView: React.FC = () => {
 
   useEffect(() => {
     loadUsers();
+    loadBases(); // 加载基地数据
   }, []);
 
   const handleSearch = () => {
@@ -128,11 +157,29 @@ const UserManagementView: React.FC = () => {
   const handleSubmit = async (userData: User) => {
     setSubmitting(true);
     try {
+      // 创建符合ApiClient.User类型的数据对象
+      const apiUserData = {
+        name: userData.name,
+        role: userData.role,
+        base_ids: userData.bases?.map(base => base.id).filter(id => id !== undefined) as number[] || [], // 使用bases提取base_ids并过滤undefined值
+        join_date: userData.join_date,
+        mobile: userData.mobile,
+        passport_number: userData.passport_number,
+        visa_expiry_date: userData.visa_expiry_date
+      };
+    
       if (editingUser?.id) {
-        await ApiClient.userManagement.update(editingUser.id, userData);
+        // 使用实例方法而不是静态方法
+        await apiClient.userUpdate(editingUser.id, apiUserData);
         notification.showSuccess('用户信息更新成功');
       } else {
-        await ApiClient.userManagement.create(userData);
+        // 添加密码字段用于创建新用户
+        const newUser = {
+          ...apiUserData,
+          password: userData.password || ''
+        };
+        // 使用实例方法而不是静态方法
+        await apiClient.userCreate(newUser);
         notification.showSuccess('用户创建成功');
       }
       setEditDialogOpen(false);
@@ -153,7 +200,8 @@ const UserManagementView: React.FC = () => {
     }
     
     try {
-      await ApiClient.userManagement.delete(id);
+      // 使用实例方法而不是静态方法
+      await apiClient.userDelete(id);
       notification.showSuccess('删除成功');
       loadUsers();
       // 清除选中项中被删除的项
@@ -178,7 +226,8 @@ const UserManagementView: React.FC = () => {
 
     setResetPasswordSubmitting(true);
     try {
-      await ApiClient.userManagement.resetPassword(resetUserId, newPassword);
+      // 使用实例方法而不是静态方法
+      await apiClient.userResetPassword(resetUserId, newPassword);
       notification.showSuccess('密码重置成功');
       setResetPasswordDialogOpen(false);
       setResetUserId(null);
@@ -223,7 +272,8 @@ const UserManagementView: React.FC = () => {
       
       if (actionId === 'delete') {
         console.log('Calling batchDelete with IDs:', ids);
-        await ApiClient.userManagement.batchDelete(ids);
+        // 使用实例方法而不是静态方法
+        await apiClient.userBatchDelete(ids);
         notification.showSuccess(`成功删除 ${ids.length} 个用户`);
         // 重新加载数据
         loadUsers();
@@ -259,36 +309,21 @@ const UserManagementView: React.FC = () => {
   
   // 获取项目标签
   const getItemLabel = (item: User) => {
-    return `${item.name} (${getRoleLabel(item.role)})`;
+    return `${item.name} (${item.role})`;
   };
 
-  const getRoleChip = (role: string) => {
+  const getRoleChip = (role?: string) => {
     switch (role) {
       case 'admin':
         return <Chip label="管理员" color="primary" size="small" />;
       case 'base_agent':
         return <Chip label="基地代理" color="secondary" size="small" />;
       case 'captain':
-        return <Chip label="队长" color="info" size="small" />;
+        return <Chip label="队长" color="success" size="small" />;
       case 'factory_manager':
-        return <Chip label="厂长" color="success" size="small" />;
+        return <Chip label="厂长" color="warning" size="small" />;
       default:
-        return <Chip label={role} color="default" size="small" />;
-    }
-  };
-
-  const getRoleLabel = (role: string) => {
-    switch (role) {
-      case 'admin':
-        return '管理员';
-      case 'base_agent':
-        return '基地代理';
-      case 'captain':
-        return '队长';
-      case 'factory_manager':
-        return '厂长';
-      default:
-        return role;
+        return <Chip label={role || '未知'} color="default" size="small" />;
     }
   };
 
@@ -325,7 +360,7 @@ const UserManagementView: React.FC = () => {
       )}
 
       {/* 搜索筛选栏 */}
-      <Box sx={{ mb: 2, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+      <Box sx={{ mb: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
         <TextField
           label="搜索用户名"
           size="small"
@@ -363,12 +398,9 @@ const UserManagementView: React.FC = () => {
           onChange={(e) => setBaseFilter(e.target.value)}
           sx={{ minWidth: 120 }}
         />
-        <Button variant="outlined" onClick={handleSearch} disabled={loading}>
-          搜索
-        </Button>
       </Box>
-      
-      {/* 批量操作 */}
+
+      {/* 批量操作栏 */}
       <BatchOperations
         allItems={users}
         selectedItems={selectedItems}
@@ -378,88 +410,81 @@ const UserManagementView: React.FC = () => {
         actions={batchActions}
         onBatchAction={handleBatchAction}
         disabled={loading}
-        showSelectAll={true}
       />
 
+      {/* 用户列表 */}
       <Table>
         <TableHead>
           <TableRow>
             <TableCell padding="checkbox">
-              {/* 留空，由BatchOperations组件管理全选 */}
+              {/* 批量操作的全选复选框由BatchOperations组件处理 */}
             </TableCell>
             <TableCell>用户名</TableCell>
             <TableCell>角色</TableCell>
-            <TableCell>所属基地</TableCell>
+            <TableCell>基地</TableCell>
+            <TableCell>入职时间</TableCell>
             <TableCell>手机号</TableCell>
-            <TableCell>入司时间</TableCell>
-            <TableCell>操作</TableCell>
+            <TableCell align="right">操作</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
-          {users.map((user) => {
-            const isSelected = selectedItems.some(item => item.id === user.id);
-            return (
-              <TableRow key={user.id} hover selected={isSelected}>
-                <TableCell padding="checkbox">
-                  <Checkbox
-                    checked={isSelected}
-                    onChange={(e) => handleItemSelect(user, e.target.checked)}
-                    color="primary"
-                  />
-                </TableCell>
-                <TableCell>
-                  <Typography variant="body2" fontWeight="medium">
-                    {user.name}
-                  </Typography>
-                </TableCell>
-                <TableCell>{getRoleChip(user.role)}</TableCell>
-                <TableCell>{user.base || '-'}</TableCell>
-                <TableCell>{user.mobile || '-'}</TableCell>
-                <TableCell>{user.join_date || '-'}</TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                    <Tooltip title="编辑">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleEdit(user)}
-                        color="primary"
-                      >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="删除">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDelete(user.id!)}
-                        color="error"
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="更多操作">
-                      <IconButton
-                        size="small"
-                        onClick={(e) => handleOpenMenu(e, user.id!)}
-                      >
-                        <MoreVertIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-          {users.length === 0 && !loading && (
+          {loading ? (
             <TableRow>
-              <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
-                <Typography color="text.secondary">
-                  暂无用户记录
-                </Typography>
+              <TableCell colSpan={7} align="center">
+                加载中...
               </TableCell>
             </TableRow>
+          ) : users.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={7} align="center">
+                暂无用户数据
+              </TableCell>
+            </TableRow>
+          ) : (
+            users.map((user) => (
+              <TableRow key={user.id} hover>
+                <TableCell padding="checkbox">
+                  <Checkbox
+                    checked={selectedItems.some(item => item.id === user.id)}
+                    onChange={(e) => handleItemSelect(user, e.target.checked)}
+                  />
+                </TableCell>
+                <TableCell>{user.name}</TableCell>
+                <TableCell>{getRoleChip(user.role)}</TableCell>
+                <TableCell>{user.bases?.map(base => base.name).join(', ') || '-'}</TableCell>
+                <TableCell>{user.join_date ? new Date(user.join_date).toLocaleDateString() : '-'}</TableCell>
+                <TableCell>{user.mobile || '-'}</TableCell>
+                <TableCell align="right">
+                  <Tooltip title="编辑">
+                    <IconButton size="small" onClick={() => handleEdit(user)}>
+                      <EditIcon />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="更多操作">
+                    <IconButton 
+                      size="small" 
+                      onClick={(e) => handleOpenMenu(e, user.id!)}
+                    >
+                      <MoreVertIcon />
+                    </IconButton>
+                  </Tooltip>
+                </TableCell>
+              </TableRow>
+            ))
           )}
         </TableBody>
       </Table>
+
+      {/* 编辑对话框 */}
+      <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="sm" fullWidth>
+        <UserForm
+          open={editDialogOpen}
+          initial={editingUser || undefined}
+          onSubmit={handleSubmit}
+          onClose={() => setEditDialogOpen(false)}
+          submitting={submitting}
+        />
+      </Dialog>
 
       {/* 更多操作菜单 */}
       <Menu
@@ -467,47 +492,41 @@ const UserManagementView: React.FC = () => {
         open={Boolean(anchorEl)}
         onClose={handleCloseMenu}
       >
-        <MenuItem onClick={() => handleOpenResetPassword(selectedUserId!)}>
-          <ResetPasswordIcon sx={{ mr: 1 }} fontSize="small" />
+        <MenuItem onClick={() => selectedUserId && handleOpenResetPassword(selectedUserId)}>
+          <ResetPasswordIcon sx={{ mr: 1 }} />
           重置密码
+        </MenuItem>
+        <MenuItem 
+          onClick={() => selectedUserId && handleDelete(selectedUserId)}
+          sx={{ color: 'error.main' }}
+        >
+          <DeleteIcon sx={{ mr: 1 }} />
+          删除用户
         </MenuItem>
       </Menu>
 
-      {/* 编辑对话框 */}
-      <UserForm
-        open={editDialogOpen}
-        onClose={() => {
-          setEditDialogOpen(false);
-          setEditingUser(null);
-        }}
-        onSubmit={handleSubmit}
-        initial={editingUser || undefined}
-        submitting={submitting}
-      />
-
-      {/* 密码重置对话框 */}
+      {/* 重置密码对话框 */}
       <Dialog open={resetPasswordDialogOpen} onClose={() => setResetPasswordDialogOpen(false)}>
         <DialogTitle>重置用户密码</DialogTitle>
         <DialogContent>
           <TextField
-            autoFocus
-            margin="dense"
             label="新密码"
             type="password"
             fullWidth
-            variant="outlined"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
+            margin="normal"
             helperText="密码至少6个字符"
-            disabled={resetPasswordSubmitting}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setResetPasswordDialogOpen(false)} disabled={resetPasswordSubmitting}>
-            取消
-          </Button>
-          <Button onClick={handleResetPassword} variant="contained" disabled={resetPasswordSubmitting}>
-            {resetPasswordSubmitting ? '重置中...' : '确认重置'}
+          <Button onClick={() => setResetPasswordDialogOpen(false)}>取消</Button>
+          <Button 
+            onClick={handleResetPassword} 
+            variant="contained" 
+            disabled={resetPasswordSubmitting}
+          >
+            {resetPasswordSubmitting ? '重置中...' : '重置密码'}
           </Button>
         </DialogActions>
       </Dialog>

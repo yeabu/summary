@@ -26,7 +26,10 @@ import {
   BarChart as StatsIcon,
   Menu as MenuIcon,
   Business as BaseIcon,
-  People as UserIcon
+  People as UserIcon,
+  Assignment as PayableIcon,
+  Assessment as PayableStatsIcon,
+  LocalShipping as SupplierIcon
 } from '@mui/icons-material';
 import UserMenu from './UserMenu';
 import useAuthStore from '../auth/AuthStore';
@@ -77,6 +80,18 @@ const StandardAppBar: React.FC = () => {
       label: '基地开支',
       path: '/expense/list',
       icon: <ExpenseIcon />,
+      available: true
+    },
+    {
+      label: '应付款管理',
+      path: '/payable/list',
+      icon: <PayableIcon />,
+      available: true
+    },
+    {
+      label: '供应商管理',
+      path: '/supplier/management',
+      icon: <SupplierIcon />,
       available: true
     },
     {

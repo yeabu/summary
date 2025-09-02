@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Paper,
   Box,
@@ -18,6 +18,7 @@ import {
   ExpandLess as ExpandLessIcon
 } from '@mui/icons-material';
 import { FilterOptions } from '@/api/AppDtos';
+import { ApiClient } from '@/api/ApiClient';
 import dayjs from 'dayjs';
 
 // 基地列表
@@ -33,9 +34,6 @@ const baseList = [
   "西安基地",
   "青岛基地"
 ];
-
-// 费用类别
-const categories = ["伙食费", "修车费", "电费", "加油费", "材料费"];
 
 // 筛选组件Props
 interface QueryFilterProps {
@@ -58,15 +56,40 @@ const QueryFilter: React.FC<QueryFilterProps> = ({
   initialFilters = {}
 }) => {
   const [expanded, setExpanded] = useState(false);
+  const [categories, setCategories] = useState<{id: number, name: string}[]>([]); // 动态加载的费用类别
   const [filters, setFilters] = useState<FilterOptions>({
     base: '',
     category: '',
+    category_id: undefined,
     supplier: '',
     order_number: '',
     start_date: '',
     end_date: '',
     ...initialFilters
   });
+
+  // 加载费用类别
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        const apiClient = new ApiClient();
+        const categoryList = await apiClient.listExpenseCategories('active');
+        setCategories(categoryList);
+      } catch (error) {
+        console.error('加载费用类别失败:', error);
+        // 如果加载失败，使用默认类别
+        setCategories([
+          {id: 1, name: "伙食费"},
+          {id: 2, name: "修车费"},
+          {id: 3, name: "电费"},
+          {id: 4, name: "加油费"},
+          {id: 5, name: "材料费"}
+        ]);
+      }
+    };
+    
+    loadCategories();
+  }, []);
 
   // 快速时间筛选
   const quickDateFilters = [
@@ -120,6 +143,7 @@ const QueryFilter: React.FC<QueryFilterProps> = ({
     const clearedFilters: FilterOptions = {
       base: '',
       category: '',
+      category_id: undefined,
       supplier: '',
       order_number: '',
       start_date: '',
@@ -192,14 +216,17 @@ const QueryFilter: React.FC<QueryFilterProps> = ({
                   select
                   fullWidth
                   label="类别"
-                  value={filters.category || ''}
-                  onChange={(e) => handleFilterChange('category', e.target.value)}
+                  value={filters.category_id || ''}
+                  onChange={(e) => {
+                    const categoryId = e.target.value ? Number(e.target.value) : undefined;
+                    handleFilterChange('category_id', categoryId?.toString() || '');
+                  }}
                   size="small"
                 >
                   <MenuItem value="">全部类别</MenuItem>
                   {categories.map((category) => (
-                    <MenuItem key={category} value={category}>
-                      {category}
+                    <MenuItem key={category.id} value={category.id}>
+                      {category.name}
                     </MenuItem>
                   ))}
                 </TextField>

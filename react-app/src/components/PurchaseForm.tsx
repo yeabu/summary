@@ -17,7 +17,7 @@ import {
   Delete as DeleteIcon
 } from '@mui/icons-material';
 import dayjs from 'dayjs';
-import { Purchase, PurchaseItem } from '@/api/AppDtos';
+import { Purchase, PurchaseItem, Base } from '@/api/AppDtos';
 import useAuthStore from '@/auth/AuthStore';
 
 // 基地列表
@@ -51,13 +51,35 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   const isAdmin = user?.role === 'admin';
   const userBase = user?.base || '';
   
+  // 辅助函数：获取基地名称
+  const getBaseName = (base: Base | undefined): string => {
+    if (!base) return '';
+    return base.name || '';
+  };
+
+  // 辅助函数：创建Base对象
+  const createBaseFromName = (baseName: string): Base => {
+    // 如果是编辑模式且有现有的base对象，保持其他属性
+    if (initial?.base && typeof initial.base === 'object') {
+      return { ...initial.base, name: baseName };
+    }
+    // 否则创建一个新的Base对象
+    return {
+      name: baseName,
+      code: '',
+      location: '',
+      description: '',
+      status: 'active'
+    };
+  };
+
   const [formData, setFormData] = useState<Purchase>({
     supplier: '',
     order_number: '',
     purchase_date: dayjs().format('YYYY-MM-DD'),
     total_amount: 0,
     receiver: '',
-    base: isAdmin ? '' : userBase, // 管理员默认空，基地代理使用自己的基地
+    base: createBaseFromName(isAdmin ? '' : userBase), // 管理员默认空，基地代理使用自己的基地
     notes: '',
     items: [
       {
@@ -76,7 +98,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     if (initial) {
       setFormData({
         ...initial,
-        base: initial.base || (isAdmin ? '' : userBase), // 确保 base 字段正确设置
+        base: initial.base || createBaseFromName(isAdmin ? '' : userBase), // 确保 base 字段正确设置
         items: initial.items?.length > 0 ? initial.items : [{
           product_name: '',
           quantity: 1,
@@ -156,7 +178,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       newErrors.receiver = '收货人不能为空';
     }
 
-    if (!formData.base.trim()) {
+    if (!getBaseName(formData.base).trim()) {
       newErrors.base = '所属基地不能为空';
     }
 
@@ -188,8 +210,14 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     }
 
     try {
-      console.log('Submitting purchase data:', formData);
-      await onSubmit(formData);
+      // 在提交前确保base_id字段正确设置
+      const submitData = {
+        ...formData,
+        base_id: formData.base?.id || 0  // 添加base_id字段
+      };
+      
+      console.log('Submitting purchase data:', submitData);
+      await onSubmit(submitData as Purchase);
     } catch (error) {
       console.error('Submit error:', error);
       const errorMessage = error instanceof Error ? error.message : '提交失败，请重试';
@@ -254,8 +282,8 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
               fullWidth
               select
               label="所属基地"
-              value={formData.base}
-              onChange={(e) => setFormData({ ...formData, base: e.target.value })}
+              value={getBaseName(formData.base)}
+              onChange={(e) => setFormData({ ...formData, base: createBaseFromName(e.target.value) })}
               error={!!errors.base}
               helperText={errors.base || '请选择采购记录所属的基地'}
               required

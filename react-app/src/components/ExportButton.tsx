@@ -20,7 +20,7 @@ import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import { BaseExpense, Purchase, FilterOptions } from '@/api/AppDtos';
 import { useNotification } from './NotificationProvider';
-import ApiClient from '@/api/ApiClient';
+import { ApiClient } from '@/api/ApiClient';
 
 interface ExportButtonProps {
   data?: any[];
@@ -50,6 +50,9 @@ const ExportButton: React.FC<ExportButtonProps> = ({
   });
   
   const notification = useNotification();
+  
+  // 创建 ApiClient 实例
+  const apiClient = new ApiClient();
 
   // 字段配置
   const fieldConfigs = {
@@ -186,12 +189,12 @@ const ExportButton: React.FC<ExportButtonProps> = ({
       if (!data || data.length === 0) {
         switch (type) {
           case 'expenses':
-            const expenseResponse = await ApiClient.expense.list(filters);
-            exportData = expenseResponse.data || [];
+            const expenseResponse = await apiClient.listExpense(filters);
+            exportData = expenseResponse || [];
             break;
           case 'purchases':
-            const purchaseResponse = await ApiClient.purchase.list();
-            exportData = purchaseResponse.data || [];
+            const purchaseResponse = await apiClient.listPurchase();
+            exportData = purchaseResponse || [];
             break;
           case 'stats':
             // stats类型通常会传入数据
