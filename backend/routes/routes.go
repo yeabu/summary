@@ -77,11 +77,5 @@ func SetupRouter() *http.ServeMux {
 	mux.HandleFunc("/api/payment/list", middleware.AuthMiddleware(handlers.ListPayments, "admin", "base_agent"))
 	mux.HandleFunc("/api/payment/delete", middleware.AuthMiddleware(handlers.DeletePayment, "admin"))
 
-<<<<<<< HEAD
-	// 添加更新应付款状态的路由
-	mux.HandleFunc("/api/payable/update-status", middleware.AuthMiddleware(handlers.UpdatePayableStatus, "admin"))
-
-=======
->>>>>>> 40aea7b13475fe61df859812522ad8e7e258c893
 	return mux
 }
