@@ -87,8 +87,9 @@ func CreateExpense(w http.ResponseWriter, r *http.Request) {
 	}
 
 	t, _ := time.Parse("2006-01-02", req.Date)
+	
+	// Create the expense record
 	expense := models.BaseExpense{
-		BaseID:      baseID,
 		Date:        t,
 		CategoryID:  req.CategoryID,
 		Amount:      req.Amount,
@@ -97,6 +98,11 @@ func CreateExpense(w http.ResponseWriter, r *http.Request) {
 		CreatorName: "", // 可通过查User表填充
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
+	}
+	
+	// Only set BaseID if it's not zero (to handle optional base for admin users)
+	if baseID != 0 {
+		expense.BaseID = &baseID
 	}
 
 	if err := db.DB.Create(&expense).Error; err != nil {
