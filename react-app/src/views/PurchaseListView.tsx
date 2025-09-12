@@ -354,11 +354,7 @@ const PurchaseListView: React.FC = () => {
       />
 
       {loading ? (
-<<<<<<< HEAD
-        <TableSkeleton rows={5} columns={6} />
-=======
         <TableSkeleton rows={5} columns={7} />
->>>>>>> 40aea7b13475fe61df859812522ad8e7e258c893
       ) : (
         <Table>
           <TableHead>
@@ -371,21 +367,14 @@ const PurchaseListView: React.FC = () => {
               <TableCell>采购日期</TableCell>
               <TableCell>总金额</TableCell>
               <TableCell>收货人</TableCell>
-<<<<<<< HEAD
-=======
               <TableCell>创建人</TableCell>
->>>>>>> 40aea7b13475fe61df859812522ad8e7e258c893
               <TableCell align="right">操作</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {purchases.length === 0 ? (
               <TableRow>
-<<<<<<< HEAD
-                <TableCell colSpan={7} align="center">
-=======
                 <TableCell colSpan={8} align="center">
->>>>>>> 40aea7b13475fe61df859812522ad8e7e258c893
                   暂无采购记录
                 </TableCell>
               </TableRow>
@@ -403,10 +392,7 @@ const PurchaseListView: React.FC = () => {
                   <TableCell>{purchase.purchase_date ? dayjs(purchase.purchase_date).format('YYYY-MM-DD') : '-'}</TableCell>
                   <TableCell>¥{purchase.total_amount?.toFixed(2) || '0.00'}</TableCell>
                   <TableCell>{purchase.receiver}</TableCell>
-<<<<<<< HEAD
-=======
                   <TableCell>{purchase.creator_name || '-'}</TableCell>
->>>>>>> 40aea7b13475fe61df859812522ad8e7e258c893
                   <TableCell align="right">
                     <Tooltip title="查看商品详情">
                       <IconButton size="small" onClick={() => handleViewItems(purchase)}>

@@ -48,16 +48,10 @@ export default function BaseExpenseListView() {
     setSelectedItems([]); // 清空选择状态
     
     try {
-<<<<<<< HEAD
-      // 只传递筛选参数，不传递分页参数给后端API
-      const params = {
-        ...currentFilters
-=======
       const params = {
         ...currentFilters,
         page: currentPage,
         page_size: currentPageSize
->>>>>>> 40aea7b13475fe61df859812522ad8e7e258c893
       };
       
       console.log('加载数据参数:', params);

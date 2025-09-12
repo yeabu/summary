@@ -96,7 +96,6 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
   useEffect(() => {
     if (initial) {
-<<<<<<< HEAD
       // 处理供应商字段，如果它是对象则提取名称
       let supplierValue = initial.supplier || '';
       if (typeof initial.supplier === 'object' && initial.supplier !== null) {
@@ -106,10 +105,6 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       setFormData({
         ...initial,
         supplier: supplierValue,
-=======
-      setFormData({
-        ...initial,
->>>>>>> 40aea7b13475fe61df859812522ad8e7e258c893
         base: initial.base || createBaseFromName(isAdmin ? '' : userBase), // 确保 base 字段正确设置
         items: initial.items?.length > 0 ? initial.items : [{
           product_name: '',
