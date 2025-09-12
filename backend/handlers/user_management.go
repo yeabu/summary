@@ -425,6 +425,7 @@ func UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+<<<<<<< HEAD
 	// 对于管理员用户，不需要关联基地
 	if req.Role == "admin" {
 		// 管理员不需要基地关联，直接提交事务
@@ -457,6 +458,9 @@ func UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 更新用户与基地的关联关系（仅对非管理员角色）
+=======
+	// 更新用户与基地的关联关系
+>>>>>>> 40aea7b13475fe61df859812522ad8e7e258c893
 	// 先删除现有的关联关系
 	if err := tx.Where("user_id = ?", user.ID).Delete(&models.UserBase{}).Error; err != nil {
 		tx.Rollback()
@@ -464,6 +468,7 @@ func UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+<<<<<<< HEAD
 	// 添加新的关联关系
 	if len(req.BaseIDs) > 0 {
 		userBases := make([]models.UserBase, len(req.BaseIDs))
@@ -483,6 +488,17 @@ func UpdateUser(w http.ResponseWriter, r *http.Request) {
 		if err := tx.Create(&userBases).Error; err != nil {
 			tx.Rollback()
 			http.Error(w, "创建用户基地关联失败", http.StatusInternalServerError)
+=======
+	// 创建新的关联关系
+	for _, baseID := range req.BaseIDs {
+		userBase := models.UserBase{
+			UserID: user.ID,
+			BaseID: baseID,
+		}
+		if err := tx.Create(&userBase).Error; err != nil {
+			tx.Rollback()
+			http.Error(w, "创建新的用户基地关联失败", http.StatusInternalServerError)
+>>>>>>> 40aea7b13475fe61df859812522ad8e7e258c893
 			return
 		}
 	}

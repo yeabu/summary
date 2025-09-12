@@ -60,6 +60,7 @@ func CreateExpense(w http.ResponseWriter, r *http.Request) {
 
 	// 确定基地信息
 	var baseID uint
+<<<<<<< HEAD
 	if role == "admin" {
 		// 对于管理员用户，基地是可选的
 		if req.BaseID != 0 {
@@ -75,22 +76,50 @@ func CreateExpense(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// 对于基地代理用户，必须使用其所属基地
 		baseName := claims["base"].(string)
+=======
+	var baseName string
+	if role == "admin" {
+		// 修复：admin用户具备所有权限，可以不指定基地（默认为所有基地）
+		// 如果指定了基地ID，则使用指定的基地；否则不指定基地（适用于查询所有基地的统计等场景）
+		if req.BaseID != 0 {
+			baseID = req.BaseID
+			// 查询基地名称用于验证
+			var base models.Base
+			if err := db.DB.First(&base, baseID).Error; err != nil {
+				http.Error(w, "指定的基地不存在", http.StatusBadRequest)
+				return
+			}
+			baseName = base.Name
+		}
+		// 如果admin用户没有指定基地ID，允许操作（不强制指定基地）
+	} else {
+		// base_agent使用自己的基地，需要通过基地名称查找ID
+		baseName = claims["base"].(string)
+>>>>>>> 40aea7b13475fe61df859812522ad8e7e258c893
 		var base models.Base
 		if err := db.DB.Where("name = ?", baseName).First(&base).Error; err != nil {
 			http.Error(w, "用户基地信息错误", http.StatusBadRequest)
 			return
 		}
 		baseID = base.ID
+<<<<<<< HEAD
 		
 		// 确保基地代理不能指定其他基地
 		if req.BaseID != 0 && req.BaseID != baseID {
 			http.Error(w, "基地代理只能为自己的基地创建开支记录", http.StatusBadRequest)
 			return
 		}
+=======
+>>>>>>> 40aea7b13475fe61df859812522ad8e7e258c893
 	}
 
 	t, _ := time.Parse("2006-01-02", req.Date)
 	expense := models.BaseExpense{
+<<<<<<< HEAD
+=======
+		BaseID:      baseID,
+		Date:        t,
+>>>>>>> 40aea7b13475fe61df859812522ad8e7e258c893
 		CategoryID:  req.CategoryID,
 		Amount:      req.Amount,
 		Detail:      req.Detail,
@@ -98,6 +127,7 @@ func CreateExpense(w http.ResponseWriter, r *http.Request) {
 		CreatorName: "", // 可通过查User表填充
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
+<<<<<<< HEAD
 		Date:        t,
 	}
 	
@@ -110,6 +140,10 @@ func CreateExpense(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "创建开支记录失败", http.StatusInternalServerError)
 		return
 	}
+=======
+	}
+	db.DB.Create(&expense)
+>>>>>>> 40aea7b13475fe61df859812522ad8e7e258c893
 
 	// 预加载关联数据
 	db.DB.Preload("Base").Preload("Category").First(&expense, expense.ID)
@@ -124,8 +158,11 @@ func ListExpense(w http.ResponseWriter, r *http.Request) {
 	}
 	var expenses []models.BaseExpense
 	query := db.DB.Preload("Base").Preload("Category").Order("date desc")
+<<<<<<< HEAD
 	
 	// 权限过滤
+=======
+>>>>>>> 40aea7b13475fe61df859812522ad8e7e258c893
 	if role := claims["role"].(string); role == "base_agent" {
 		baseName := claims["base"].(string)
 		// 通过基地名称查找基地ID
@@ -133,11 +170,15 @@ func ListExpense(w http.ResponseWriter, r *http.Request) {
 		if err := db.DB.Where("name = ?", baseName).First(&base).Error; err == nil {
 			query = query.Where("base_id = ?", base.ID)
 		}
+<<<<<<< HEAD
 	}
 	// 管理员可以查看所有记录，无需额外过滤
 
 	// 筛选参数
 	if role := claims["role"].(string); role == "admin" {
+=======
+	} else if role == "admin" {
+>>>>>>> 40aea7b13475fe61df859812522ad8e7e258c893
 		if base := r.URL.Query().Get("base"); base != "" {
 			// 支持通过基地名称过滤
 			var baseModel models.Base
@@ -146,7 +187,10 @@ func ListExpense(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+<<<<<<< HEAD
 	
+=======
+>>>>>>> 40aea7b13475fe61df859812522ad8e7e258c893
 	if cat := r.URL.Query().Get("category"); cat != "" {
 		// 支持通过类别名称过滤
 		var category models.ExpenseCategory
@@ -158,6 +202,7 @@ func ListExpense(w http.ResponseWriter, r *http.Request) {
 		// 支持通过类别ID过滤
 		query = query.Where("category_id = ?", cid)
 	}
+<<<<<<< HEAD
 	
 	// 添加日期范围筛选支持
 	if startDate := r.URL.Query().Get("start_date"); startDate != "" {
@@ -167,6 +212,8 @@ func ListExpense(w http.ResponseWriter, r *http.Request) {
 		query = query.Where("date <= ?", endDate)
 	}
 	
+=======
+>>>>>>> 40aea7b13475fe61df859812522ad8e7e258c893
 	if ym := r.URL.Query().Get("month"); ym != "" {
 		// 修复日期范围查询 - 使用正确的月份结束日期
 		t, _ := time.Parse("2006-01", ym)
@@ -256,6 +303,7 @@ func StatExpense(w http.ResponseWriter, r *http.Request) {
 		Joins("LEFT JOIN bases ON bases.id = base_expenses.base_id").
 		Joins("LEFT JOIN expense_categories ON expense_categories.id = base_expenses.category_id").
 		Where("base_expenses.date >= ? AND base_expenses.date < ?", startDate, endDate)
+<<<<<<< HEAD
 		
 	// 权限过滤
 	if role := claims["role"].(string); role == "base_agent" {
@@ -263,6 +311,12 @@ func StatExpense(w http.ResponseWriter, r *http.Request) {
 		group = group.Where("bases.name = ?", baseName)
 	} else if role == "admin" && base != "" {
 		// 管理员可以查看所有记录，但如果指定了基地，则按基地筛选
+=======
+	if role := claims["role"].(string); role == "base_agent" {
+		baseName := claims["base"].(string)
+		group = group.Where("bases.name = ?", baseName)
+	} else if base != "" {
+>>>>>>> 40aea7b13475fe61df859812522ad8e7e258c893
 		group = group.Where("bases.name = ?", base)
 	}
 	group = group.Group("bases.name, expense_categories.name, month").Order("bases.name, expense_categories.name")

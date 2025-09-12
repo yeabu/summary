@@ -224,9 +224,21 @@ func ListPurchase(w http.ResponseWriter, r *http.Request) {
 			// 如果用户没有关联基地，则不显示任何记录
 			q = q.Where("1 = 0")
 		}
+<<<<<<< HEAD
 	}
 	// 管理员可以查看所有记录，无需额外过滤
 	// 如果需要按基地筛选，可以在查询参数中指定
+=======
+	} else if userRole == "admin" {
+		// 管理员可以查看所有记录，支持按基地筛选
+		if base := r.URL.Query().Get("base"); base != "" {
+			var baseModel models.Base
+			if err := db.DB.Where("name = ?", base).First(&baseModel).Error; err == nil {
+				q = q.Where("base_id = ?", baseModel.ID)
+			}
+		}
+	}
+>>>>>>> 40aea7b13475fe61df859812522ad8e7e258c893
 
 	// 添加筛选条件支持
 	// 供应商筛选
@@ -256,6 +268,7 @@ func ListPurchase(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+<<<<<<< HEAD
 	// 基地筛选（仅管理员可用）
 	if userRole == "admin" {
 		if base := r.URL.Query().Get("base"); base != "" {
@@ -266,6 +279,8 @@ func ListPurchase(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+=======
+>>>>>>> 40aea7b13475fe61df859812522ad8e7e258c893
 	q.Find(&purchases)
 	json.NewEncoder(w).Encode(purchases)
 }
