@@ -4,6 +4,8 @@ import { getValidAccessTokenOrRefresh } from "../utils/authToken";
 export interface Supplier {
   id: number;
   name: string;
+  settlement_type?: 'immediate' | 'monthly' | 'flexible';
+  settlement_day?: number;
   contact_person?: string;
   phone?: string;
   email?: string;
@@ -21,6 +23,8 @@ export interface SupplierListResponse {
 // 创建供应商请求
 export interface CreateSupplierRequest {
   name: string;
+  settlement_type?: 'immediate' | 'monthly' | 'flexible';
+  settlement_day?: number;
   contact_person?: string;
   phone?: string;
   email?: string;
@@ -30,6 +34,8 @@ export interface CreateSupplierRequest {
 // 更新供应商请求
 export interface UpdateSupplierRequest {
   name?: string;
+  settlement_type?: 'immediate' | 'monthly' | 'flexible';
+  settlement_day?: number;
   contact_person?: string;
   phone?: string;
   email?: string;

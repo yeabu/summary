@@ -114,11 +114,14 @@ func GetSupplierDetail(w http.ResponseWriter, r *http.Request) {
 
 // CreateSupplierRequest 创建供应商请求
 type CreateSupplierRequest struct {
-	Name         string `json:"name"`
-	ContactPerson string `json:"contact_person,omitempty"`
-	Phone        string `json:"phone,omitempty"`
-	Email        string `json:"email,omitempty"`
-	Address      string `json:"address,omitempty"`
+    Name         string `json:"name"`
+    ContactPerson string `json:"contact_person,omitempty"`
+    Phone        string `json:"phone,omitempty"`
+    Email        string `json:"email,omitempty"`
+    Address      string `json:"address,omitempty"`
+    // 结算配置（可选）
+    SettlementType string `json:"settlement_type,omitempty"` // immediate | monthly | flexible
+    SettlementDay  *int   `json:"settlement_day,omitempty"`  // 1-31（月结日）
 }
 
 // CreateSupplier 创建供应商
@@ -155,13 +158,26 @@ func CreateSupplier(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 创建供应商
-	supplier := models.Supplier{
-		Name:          req.Name,
-		ContactPerson: req.ContactPerson,
-		Phone:         req.Phone,
-		Email:         req.Email,
-		Address:       req.Address,
-	}
+    supplier := models.Supplier{
+        Name:          req.Name,
+        ContactPerson: req.ContactPerson,
+        Phone:         req.Phone,
+        Email:         req.Email,
+        Address:       req.Address,
+        SettlementType: func() string {
+            if req.SettlementType == "immediate" || req.SettlementType == "monthly" || req.SettlementType == "flexible" {
+                return req.SettlementType
+            }
+            return "flexible"
+        }(),
+        SettlementDay:  func() *int {
+            if req.SettlementType == "monthly" && req.SettlementDay != nil {
+                day := *req.SettlementDay
+                if day >= 1 && day <= 31 { return req.SettlementDay }
+            }
+            return nil
+        }(),
+    }
 
 	if err := db.DB.Create(&supplier).Error; err != nil {
 		http.Error(w, "创建供应商失败", http.StatusInternalServerError)
@@ -174,11 +190,13 @@ func CreateSupplier(w http.ResponseWriter, r *http.Request) {
 
 // UpdateSupplierRequest 更新供应商请求
 type UpdateSupplierRequest struct {
-	Name         *string `json:"name,omitempty"`
-	ContactPerson *string `json:"contact_person,omitempty"`
-	Phone        *string `json:"phone,omitempty"`
-	Email        *string `json:"email,omitempty"`
-	Address      *string `json:"address,omitempty"`
+    Name         *string `json:"name,omitempty"`
+    ContactPerson *string `json:"contact_person,omitempty"`
+    Phone        *string `json:"phone,omitempty"`
+    Email        *string `json:"email,omitempty"`
+    Address      *string `json:"address,omitempty"`
+    SettlementType *string `json:"settlement_type,omitempty"`
+    SettlementDay  *int    `json:"settlement_day,omitempty"`
 }
 
 // UpdateSupplier 更新供应商
@@ -224,7 +242,7 @@ func UpdateSupplier(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 更新供应商
-	updates := make(map[string]interface{})
+    updates := make(map[string]interface{})
 	if req.Name != nil {
 		updates["name"] = *req.Name
 	}
@@ -237,9 +255,33 @@ func UpdateSupplier(w http.ResponseWriter, r *http.Request) {
 	if req.Email != nil {
 		updates["email"] = *req.Email
 	}
-	if req.Address != nil {
-		updates["address"] = *req.Address
-	}
+    if req.Address != nil {
+        updates["address"] = *req.Address
+    }
+    if req.SettlementType != nil {
+        st := *req.SettlementType
+        if st == "immediate" || st == "monthly" || st == "flexible" {
+            updates["settlement_type"] = st
+            if st != "monthly" { // 非月结清空结算日
+                updates["settlement_day"] = nil
+            }
+        } else {
+            http.Error(w, "结算方式无效", http.StatusBadRequest)
+            return
+        }
+    }
+    if req.SettlementDay != nil {
+        // 仅在月结时允许设置
+        if (req.SettlementType != nil && *req.SettlementType == "monthly") || (req.SettlementType == nil && supplier.SettlementType == "monthly") {
+            day := *req.SettlementDay
+            if day >= 1 && day <= 31 {
+                updates["settlement_day"] = day
+            } else {
+                http.Error(w, "结算日需在1-31之间", http.StatusBadRequest)
+                return
+            }
+        }
+    }
 
 	if len(updates) > 0 {
 		if err := db.DB.Model(&supplier).Updates(updates).Error; err != nil {

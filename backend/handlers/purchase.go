@@ -1,14 +1,16 @@
 package handlers
 
 import (
-	"backend/db"
-	"backend/middleware"
-	"backend/models"
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"strconv"
-	"time"
+    "backend/db"
+    "backend/middleware"
+    "backend/models"
+    "encoding/json"
+    "fmt"
+    "log"
+    "net/http"
+    "strings"
+    "strconv"
+    "time"
 )
 
 type PurchaseItemReq struct {
@@ -28,28 +30,60 @@ type PurchaseReq struct {
 }
 
 func CreatePurchase(w http.ResponseWriter, r *http.Request) {
-	claims, err := middleware.ParseJWT(r)
-	if err != nil {
-		http.Error(w, "token无效", http.StatusUnauthorized)
-		return
-	}
+    // 防止panic导致空响应
+    defer func() {
+        if rec := recover(); rec != nil {
+            log.Printf("[CreatePurchase] panic: %v", rec)
+            http.Error(w, "内部错误: purchase.create", http.StatusInternalServerError)
+        }
+    }()
+    claims, err := middleware.ParseJWT(r)
+    if err != nil {
+        http.Error(w, "token无效", http.StatusUnauthorized)
+        return
+    }
 
-	// 允许admin和base_agent都可以创建采购记录
-	userRole := claims["role"].(string)
-	if userRole != "admin" && userRole != "base_agent" {
-		http.Error(w, "没有权限创建采购记录", http.StatusForbidden)
-		return
-	}
+    // 允许admin和base_agent都可以创建采购记录（健壮获取role，避免断言panic）
+    var userRole string
+    if v, ok := claims["role"]; ok && v != nil {
+        if s, ok2 := v.(string); ok2 {
+            userRole = s
+        }
+    }
+    if userRole != "admin" && userRole != "base_agent" {
+        http.Error(w, "没有权限创建采购记录", http.StatusForbidden)
+        return
+    }
 
-	var req PurchaseReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "参数错误", http.StatusBadRequest)
-		return
-	}
+    var req PurchaseReq
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        http.Error(w, "参数错误", http.StatusBadRequest)
+        return
+    }
+
+    // 基础参数校验
+    if req.SupplierID == nil || *req.SupplierID == 0 {
+        http.Error(w, "supplier_id 必填", http.StatusBadRequest)
+        return
+    }
+    if len(req.Items) == 0 {
+        http.Error(w, "采购明细不能为空", http.StatusBadRequest)
+        return
+    }
+    for _, it := range req.Items {
+        if strings.TrimSpace(it.ProductName) == "" {
+            http.Error(w, "商品名称不能为空", http.StatusBadRequest)
+            return
+        }
+        if it.Quantity <= 0 || it.UnitPrice <= 0 {
+            http.Error(w, "商品数量和单价必须大于0", http.StatusBadRequest)
+            return
+        }
+    }
 
 	// 处理BaseID字段根据用户角色
 	var baseID uint
-	if userRole == "admin" {
+    if userRole == "admin" {
 		// 管理员可以为任意基地创建采购记录
 		// 如果指定了基地ID，则使用指定的基地
 		if req.BaseID != 0 {
@@ -65,15 +99,24 @@ func CreatePurchase(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "管理员必须指定基地", http.StatusBadRequest)
 			return
 		}
-	} else {
-		// 基地代理只能为自己的基地创建记录
-		// 获取用户关联的基地列表
-		uid := uint(claims["uid"].(float64))
-		var user models.User
-		if err := db.DB.Preload("Bases").First(&user, uid).Error; err != nil {
-			http.Error(w, "用户信息错误", http.StatusBadRequest)
-			return
-		}
+    } else { // base_agent
+        // 基地代理只能为自己的基地创建记录
+        // 获取用户关联的基地列表（健壮获取uid）
+        var uid uint
+        if v, ok := claims["uid"]; ok && v != nil {
+            if f, ok2 := v.(float64); ok2 { uid = uint(f) }
+        } else if v, ok := claims["user_id"]; ok && v != nil {
+            if f, ok2 := v.(float64); ok2 { uid = uint(f) }
+        }
+        if uid == 0 {
+            http.Error(w, "token缺少用户信息", http.StatusUnauthorized)
+            return
+        }
+        var user models.User
+        if err := db.DB.Preload("Bases").First(&user, uid).Error; err != nil {
+            http.Error(w, "用户信息错误", http.StatusBadRequest)
+            return
+        }
 
 		// 检查用户是否关联了基地
 		if len(user.Bases) == 0 {
@@ -109,7 +152,15 @@ func CreatePurchase(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	pd, _ := time.Parse("2006-01-02", req.PurchaseDate)
+    pd, _ := time.Parse("2006-01-02", req.PurchaseDate)
+    // 若未提供总额，按明细求和
+    if req.TotalAmount <= 0 {
+        var sum float64
+        for _, it := range req.Items {
+            sum += it.Quantity * it.UnitPrice
+        }
+        req.TotalAmount = sum
+    }
 
 	// 开始事务
 	tx := db.DB.Begin()
@@ -119,23 +170,35 @@ func CreatePurchase(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 创建采购记录
-	p := models.PurchaseEntry{
-		SupplierID:   req.SupplierID, // 使用SupplierID而不是Supplier
-		OrderNumber:  req.OrderNumber,
-		PurchaseDate: pd,
-		TotalAmount:  req.TotalAmount,
-		Receiver:     req.Receiver,
-		BaseID:       baseID,
-		CreatedBy:    uint(claims["uid"].(float64)),
-		CreatorName:  claims["username"].(string), // 添加创建人姓名
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
-	}
-	if err := tx.Create(&p).Error; err != nil {
-		tx.Rollback()
-		http.Error(w, "创建采购记录失败", http.StatusInternalServerError)
-		return
-	}
+    // 提取创建人信息
+    var creatorID uint
+    if v, ok := claims["uid"]; ok && v != nil {
+        if f, ok2 := v.(float64); ok2 { creatorID = uint(f) }
+    } else if v, ok := claims["user_id"]; ok && v != nil {
+        if f, ok2 := v.(float64); ok2 { creatorID = uint(f) }
+    }
+    var creatorName string
+    if v, ok := claims["username"]; ok && v != nil {
+        if s, ok2 := v.(string); ok2 { creatorName = s }
+    }
+    p := models.PurchaseEntry{
+        SupplierID:   req.SupplierID, // 使用SupplierID而不是Supplier
+        OrderNumber:  req.OrderNumber,
+        PurchaseDate: pd,
+        TotalAmount:  req.TotalAmount,
+        Receiver:     req.Receiver,
+        BaseID:       baseID,
+        CreatedBy:    creatorID,
+        CreatorName:  creatorName,
+        CreatedAt:    time.Now(),
+        UpdatedAt:    time.Now(),
+    }
+    if err := tx.Create(&p).Error; err != nil {
+        tx.Rollback()
+        log.Printf("[CreatePurchase] create purchase error: %v", err)
+        http.Error(w, "创建采购记录失败", http.StatusInternalServerError)
+        return
+    }
 
 	// 创建采购明细
 	items := make([]models.PurchaseEntryItem, len(req.Items))
@@ -148,33 +211,167 @@ func CreatePurchase(w http.ResponseWriter, r *http.Request) {
 			Amount:          item.Amount,
 		}
 	}
-	if err := tx.Create(&items).Error; err != nil {
-		tx.Rollback()
-		http.Error(w, "创建采购明细失败", http.StatusInternalServerError)
-		return
-	}
+    if err := tx.Create(&items).Error; err != nil {
+        tx.Rollback()
+        log.Printf("[CreatePurchase] create items error: %v", err)
+        http.Error(w, "创建采购明细失败", http.StatusInternalServerError)
+        return
+    }
 
-	// 自动创建应付款记录
-	// 默认设置到期日期为采购日期后30天
-	dueDate := pd.AddDate(0, 0, 30)
+    // 自动创建/聚合应付款记录
+    // 规则：
+    // - 若供应商结算方式为 immediate（即付），则按采购单生成独立的应付款
+    // - 若为 monthly（按月）或 flexible（不定期），则聚合到该供应商+基地的未结清应付款；
+    //   monthly 会按采购月聚合到 period_month 相同的记录
 
-	payable := models.PayableRecord{
-		PurchaseEntryID: p.ID,
-		SupplierID:      req.SupplierID, // 使用SupplierID而不是Supplier
-		TotalAmount:     req.TotalAmount,
-		PaidAmount:      0,
-		RemainingAmount: req.TotalAmount,
-		Status:          models.PayableStatusPending,
-		DueDate:         &dueDate,
-		BaseID:          baseID,
-		CreatedBy:       uint(claims["uid"].(float64)),
-	}
+    // 读取供应商结算方式（可为空）
+    settlementType := "flexible"
+    settlementDay := 0
+    if req.SupplierID != nil && *req.SupplierID != 0 {
+        var sup models.Supplier
+        if err := tx.First(&sup, *req.SupplierID).Error; err == nil {
+            if sup.SettlementType != "" { settlementType = sup.SettlementType }
+            if sup.SettlementDay != nil { settlementDay = *sup.SettlementDay }
+        }
+    }
 
-	if err := tx.Create(&payable).Error; err != nil {
-		tx.Rollback()
-		http.Error(w, "创建应付款记录失败", http.StatusInternalServerError)
-		return
-	}
+    periodMonth := ""
+    periodHalf := ""
+    if settlementType == "monthly" {
+        periodMonth = pd.Format("2006-01")
+    } else if settlementType == "flexible" {
+        // 半年分段：H1=1-6月，H2=7-12月
+        half := "H1"
+        if int(pd.Month()) >= 7 { half = "H2" }
+        periodHalf = fmt.Sprintf("%04d-%s", pd.Year(), half)
+    }
+
+    var payable models.PayableRecord
+    if settlementType == "immediate" {
+        // 独立创建
+        dueDate := pd.AddDate(0, 0, 30)
+        // 提取用户ID
+        var uid uint
+        if v, ok := claims["uid"]; ok && v != nil {
+            if f, ok2 := v.(float64); ok2 { uid = uint(f) }
+        } else if v, ok := claims["user_id"]; ok && v != nil {
+            if f, ok2 := v.(float64); ok2 { uid = uint(f) }
+        } else {
+            tx.Rollback()
+            http.Error(w, "token缺少用户信息", http.StatusUnauthorized)
+            return
+        }
+
+        payable = models.PayableRecord{
+            PurchaseEntryID: &p.ID,
+            SupplierID:      req.SupplierID,
+            TotalAmount:     req.TotalAmount,
+            PaidAmount:      0,
+            RemainingAmount: req.TotalAmount,
+            Status:          models.PayableStatusPending,
+            DueDate:         &dueDate,
+            BaseID:          baseID,
+            CreatedBy:       uid,
+            PeriodMonth:     periodMonth,
+            PeriodHalf:      periodHalf,
+        }
+        if err := tx.Create(&payable).Error; err != nil {
+            tx.Rollback()
+            log.Printf("[CreatePurchase] create payable(immediate) error: %v", err)
+            http.Error(w, "创建应付款记录失败", http.StatusInternalServerError)
+            return
+        }
+    } else {
+        // 聚合：查找同供应商+基地且未结清的应付款（按月则匹配 period_month）
+        q := tx.Where("base_id = ? AND status IN ?", baseID, []string{models.PayableStatusPending, models.PayableStatusPartial})
+        if req.SupplierID != nil { q = q.Where("supplier_id = ?", *req.SupplierID) } else { q = q.Where("supplier_id IS NULL") }
+        if periodMonth != "" {
+            q = q.Where("period_month = ?", periodMonth)
+        } else {
+            q = q.Where("(period_month = '' OR period_month IS NULL)")
+        }
+        if periodHalf != "" {
+            q = q.Where("period_half = ?", periodHalf)
+        } else {
+            q = q.Where("(period_half = '' OR period_half IS NULL)")
+        }
+
+        err := q.First(&payable).Error
+        if err != nil {
+            // 未找到则创建新的聚合应付款
+            var due *time.Time
+            if settlementType == "monthly" {
+                // 按月：到期日为当月结算日（若未设置，默认月末）
+                y, m, _ := pd.Date()
+                day := settlementDay
+                if day <= 0 || day > 28 { // 简化处理：>28按月末
+                    // 月末
+                    firstNext := time.Date(y, m, 1, 0, 0, 0, 0, pd.Location()).AddDate(0, 1, 0)
+                    lastOfMonth := firstNext.AddDate(0, 0, -1)
+                    due = &lastOfMonth
+                } else {
+                    d := time.Date(y, m, day, 0, 0, 0, 0, pd.Location())
+                    due = &d
+                }
+            }
+            // 提取用户ID
+            var uid2 uint
+            if v, ok := claims["uid"]; ok {
+                uid2 = uint(v.(float64))
+            } else if v, ok := claims["user_id"]; ok && v != nil {
+                uid2 = uint(v.(float64))
+            } else {
+                tx.Rollback()
+                http.Error(w, "token缺少用户信息", http.StatusUnauthorized)
+                return
+            }
+
+            payable = models.PayableRecord{
+                SupplierID:      req.SupplierID,
+                TotalAmount:     0,
+                PaidAmount:      0,
+                RemainingAmount: 0,
+                Status:          models.PayableStatusPending,
+                DueDate:         due,
+                BaseID:          baseID,
+                CreatedBy:       uid2,
+                PeriodMonth:     periodMonth,
+                PeriodHalf:      periodHalf,
+            }
+            if err := tx.Create(&payable).Error; err != nil {
+                tx.Rollback()
+                http.Error(w, "创建聚合应付款失败", http.StatusInternalServerError)
+                return
+            }
+        }
+
+        // 关联采购到应付款，并累计金额
+        link := models.PayableLink{
+            PayableRecordID: payable.ID,
+            PurchaseEntryID: p.ID,
+            Amount:          req.TotalAmount,
+        }
+        if err := tx.Create(&link).Error; err != nil {
+            tx.Rollback()
+            log.Printf("[CreatePurchase] create payable link error: %v", err)
+            http.Error(w, "创建应付款关联失败", http.StatusInternalServerError)
+            return
+        }
+
+        // 更新应付款金额与剩余
+        newTotal := payable.TotalAmount + req.TotalAmount
+        updates := map[string]interface{}{
+            "total_amount":     newTotal,
+            "remaining_amount": newTotal - payable.PaidAmount,
+            "updated_at":       time.Now(),
+        }
+        if err := tx.Model(&payable).Updates(updates).Error; err != nil {
+            tx.Rollback()
+            log.Printf("[CreatePurchase] update payable totals error: %v", err)
+            http.Error(w, "更新应付款金额失败", http.StatusInternalServerError)
+            return
+        }
+    }
 
 	// 提交事务
 	if err := tx.Commit().Error; err != nil {
@@ -264,6 +461,84 @@ func ListPurchase(w http.ResponseWriter, r *http.Request) {
 
 	q.Find(&purchases)
 	json.NewEncoder(w).Encode(purchases)
+}
+
+// SupplierSuggestions 返回常用供应商（按采购使用次数排序）
+func SupplierSuggestions(w http.ResponseWriter, r *http.Request) {
+    claims, err := middleware.ParseJWT(r)
+    if err != nil {
+        http.Error(w, "token无效", http.StatusUnauthorized)
+        return
+    }
+    role := claims["role"].(string)
+    if role != "admin" && role != "base_agent" {
+        http.Error(w, "无权访问", http.StatusForbidden)
+        return
+    }
+
+    limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+    if limit <= 0 || limit > 50 { limit = 15 }
+
+    type Row struct {
+        ID   uint   `json:"id"`
+        Name string `json:"name"`
+        Cnt  int64  `json:"count"`
+    }
+    var rows []Row
+    db.DB.
+        Table("suppliers s").
+        Select("s.id, s.name, COUNT(pe.id) as cnt").
+        Joins("LEFT JOIN purchase_entries pe ON pe.supplier_id = s.id").
+        Group("s.id, s.name").
+        Order("cnt DESC, s.updated_at DESC").
+        Limit(limit).
+        Scan(&rows)
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(rows)
+}
+
+// ProductSuggestions 返回某供应商的常用商品及建议单价
+func ProductSuggestions(w http.ResponseWriter, r *http.Request) {
+    claims, err := middleware.ParseJWT(r)
+    if err != nil {
+        http.Error(w, "token无效", http.StatusUnauthorized)
+        return
+    }
+    role := claims["role"].(string)
+    if role != "admin" && role != "base_agent" {
+        http.Error(w, "无权访问", http.StatusForbidden)
+        return
+    }
+
+    sidStr := r.URL.Query().Get("supplier_id")
+    sid, _ := strconv.ParseUint(sidStr, 10, 64)
+    if sid == 0 {
+        http.Error(w, "supplier_id 必填", http.StatusBadRequest)
+        return
+    }
+    limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+    if limit <= 0 || limit > 100 { limit = 15 }
+
+    type Row struct {
+        ProductName string  `json:"product_name"`
+        AvgPrice    float64 `json:"avg_price"`
+        Times       int64   `json:"times"`
+        LastDate    string  `json:"last_date"`
+    }
+    var rows []Row
+    db.DB.
+        Table("purchase_entry_items pei").
+        Select("pei.product_name, AVG(pei.unit_price) as avg_price, COUNT(*) as times, DATE_FORMAT(MAX(pe.purchase_date), '%Y-%m-%d') as last_date").
+        Joins("JOIN purchase_entries pe ON pe.id = pei.purchase_entry_id").
+        Where("pe.supplier_id = ?", sid).
+        Group("pei.product_name").
+        Order("times DESC, MAX(pe.purchase_date) DESC").
+        Limit(limit).
+        Scan(&rows)
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(rows)
 }
 
 // 删除单个采购记录

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { ApiClient } from "@/api/ApiClient";
-import { Paper, Box, Button, Table, TableHead, TableRow, TableCell, TableBody, Dialog, Typography, Alert, Checkbox } from "@mui/material";
+import { Paper, Box, Button, Table, TableHead, TableRow, TableCell, TableBody, Dialog, Typography, Alert, Checkbox, IconButton } from "@mui/material";
+import CloseIcon from '@mui/icons-material/Close';
 import BaseExpenseForm from "@/components/BaseExpenseForm";
 import QueryFilter from "@/components/QueryFilter";
 import PaginationControl from "@/components/PaginationControl";
@@ -314,7 +315,14 @@ export default function BaseExpenseListView() {
       </Paper>
         
       <Dialog open={!!edit} onClose={() => setEdit(null)} maxWidth="md" fullWidth>
-        <Box p={3}>
+        <Box p={3} sx={{ position: 'relative' }}>
+          <IconButton
+            aria-label="close"
+            onClick={() => setEdit(null)}
+            sx={{ position: 'absolute', right: 8, top: 8 }}
+          >
+            <CloseIcon />
+          </IconButton>
           <BaseExpenseForm
             initial={edit ? {
               date: edit.date,
@@ -324,6 +332,7 @@ export default function BaseExpenseListView() {
               base: edit.base
             } : undefined}
             submitting={submitting}
+            onCancel={() => setEdit(null)}
             onSubmit={async (v: any) => {
               try {
                 setSubmitting(true);

@@ -115,7 +115,7 @@ export interface Purchase {
   purchase_date: string;
   total_amount: number;
   receiver: string;
-  base: Base;
+  base?: Base;  // 在表单中允许未选择（管理员需选择，提交时校验）
   base_id?: number;  // 添加base_id字段用于提交
   notes?: string;
   items: PurchaseItem[];

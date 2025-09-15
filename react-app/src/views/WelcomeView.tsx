@@ -56,7 +56,7 @@ const WelcomeView = () => {
     },
     {
       title: '统计分析',
-      description: '查看开支和采购的统计报表',
+      description: '查看开支、采购与欠款分析',
       icon: <StatsIcon sx={{ fontSize: 40 }} />,
       path: '/expense/stats',
       color: '#ff9800',

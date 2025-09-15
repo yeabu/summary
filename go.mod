@@ -1,6 +1,6 @@
 module summary
 
-go 1.25.0
+go 1.25
 
 require (
 	github.com/go-sql-driver/mysql v1.9.3

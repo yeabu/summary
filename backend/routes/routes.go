@@ -7,16 +7,20 @@ import (
 )
 
 func SetupRouter() *http.ServeMux {
-	mux := http.NewServeMux()
+    mux := http.NewServeMux()
 	// 登录相关
 	mux.HandleFunc("/api/login", handlers.Login)
 	mux.HandleFunc("/api/user/change_password", middleware.AuthMiddleware(handlers.ChangePassword, "admin", "base_agent"))
 
-	// 采购记录管理
-	mux.HandleFunc("/api/purchase/create", middleware.AuthMiddleware(handlers.CreatePurchase, "admin", "base_agent"))
-	mux.HandleFunc("/api/purchase/list", middleware.AuthMiddleware(handlers.ListPurchase, "admin", "base_agent"))
-	mux.HandleFunc("/api/purchase/delete", middleware.AuthMiddleware(handlers.DeletePurchase, "admin", "base_agent"))
-	mux.HandleFunc("/api/purchase/batch-delete", middleware.AuthMiddleware(handlers.BatchDeletePurchase, "admin", "base_agent"))
+    // 采购记录管理
+    mux.HandleFunc("/api/purchase/create", middleware.AuthMiddleware(handlers.CreatePurchase, "admin", "base_agent"))
+    mux.HandleFunc("/api/purchase/list", middleware.AuthMiddleware(handlers.ListPurchase, "admin", "base_agent"))
+    mux.HandleFunc("/api/purchase/update", middleware.AuthMiddleware(handlers.UpdatePurchase, "admin", "base_agent"))
+    mux.HandleFunc("/api/purchase/delete", middleware.AuthMiddleware(handlers.DeletePurchase, "admin", "base_agent"))
+    mux.HandleFunc("/api/purchase/batch-delete", middleware.AuthMiddleware(handlers.BatchDeletePurchase, "admin", "base_agent"))
+    // 采购建议（常用供应商、常用商品）
+    mux.HandleFunc("/api/purchase/supplier-suggestions", middleware.AuthMiddleware(handlers.SupplierSuggestions, "admin", "base_agent"))
+    mux.HandleFunc("/api/purchase/product-suggestions", middleware.AuthMiddleware(handlers.ProductSuggestions, "admin", "base_agent"))
 
 	// 费用记录管理
 	mux.HandleFunc("/api/expense/create", middleware.AuthMiddleware(handlers.CreateExpense, "admin", "base_agent"))
@@ -75,7 +79,10 @@ func SetupRouter() *http.ServeMux {
 	// 还款记录管理
 	mux.HandleFunc("/api/payment/create", middleware.AuthMiddleware(handlers.CreatePayment, "admin", "base_agent"))
 	mux.HandleFunc("/api/payment/list", middleware.AuthMiddleware(handlers.ListPayments, "admin", "base_agent"))
-	mux.HandleFunc("/api/payment/delete", middleware.AuthMiddleware(handlers.DeletePayment, "admin"))
+    mux.HandleFunc("/api/payment/delete", middleware.AuthMiddleware(handlers.DeletePayment, "admin"))
 
-	return mux
+    // 统计分析
+    mux.HandleFunc("/api/analytics/summary", middleware.AuthMiddleware(handlers.AnalyticsSummary, "admin", "base_agent"))
+
+    return mux
 }

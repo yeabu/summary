@@ -5,7 +5,7 @@
  * 支持添加、编辑、查看采购记录
  * 支持筛选条件功能
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Paper,
   Box,
@@ -40,6 +40,7 @@ import { TableSkeleton } from '@/components/LoadingComponents';
 import BatchOperations, { BatchAction } from '@/components/BatchOperations';
 import { useNotification } from '@/components/NotificationProvider';
 import dayjs from 'dayjs';
+import { useLocation } from 'react-router-dom';
 import { ApiClient } from '@/api/ApiClient';
 
 const PurchaseListView: React.FC = () => {
@@ -50,7 +51,23 @@ const PurchaseListView: React.FC = () => {
   const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>('');
-  const [filters, setFilters] = useState<FilterOptions>({});
+  const location = useLocation();
+  const initialFromSearch = useMemo<FilterOptions>(() => {
+    const params = new URLSearchParams(location.search);
+    const f: FilterOptions = {};
+    const supplier = params.get('supplier');
+    const start = params.get('start_date');
+    const end = params.get('end_date');
+    const base = params.get('base');
+    const order = params.get('order_number');
+    if (supplier) f.supplier = supplier;
+    if (start) f.start_date = start;
+    if (end) f.end_date = end;
+    if (base) f.base = base;
+    if (order) f.order_number = order;
+    return f;
+  }, [location.search]);
+  const [filters, setFilters] = useState<FilterOptions>(initialFromSearch);
   
   // 批量选择状态
   const [selectedItems, setSelectedItems] = useState<Purchase[]>([]);
@@ -127,7 +144,8 @@ const PurchaseListView: React.FC = () => {
   };
 
   useEffect(() => {
-    loadPurchases();
+    loadPurchases(filters);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleAddNew = () => {
@@ -146,15 +164,15 @@ const PurchaseListView: React.FC = () => {
       let result;
       const isEditing = editingPurchase?.id;
       
-      // 创建符合ApiClient.PurchaseEntry类型的数据对象
-      const purchaseEntryData = {
-        supplier_id: undefined, // 如果需要supplier_id，需要额外处理
-        supplier: purchaseData.supplier,
+      // 创建符合 ApiClient 期望的 payload
+      const supplierId = (purchaseData as any).supplier_id as number | undefined;
+      const purchaseEntryData: any = {
+        supplier_id: supplierId, // 后端按ID识别供应商
         order_number: purchaseData.order_number,
         purchase_date: purchaseData.purchase_date,
         total_amount: purchaseData.total_amount,
         receiver: purchaseData.receiver,
-        base_id: purchaseData.base.id || 0, // 从base对象中提取base_id
+        base_id: purchaseData.base?.id || 0,
         notes: purchaseData.notes,
         items: purchaseData.items.map(item => ({
           product_name: item.product_name,
@@ -163,6 +181,25 @@ const PurchaseListView: React.FC = () => {
           amount: item.amount
         }))
       };
+      if (!purchaseEntryData.supplier_id) {
+        console.warn('[PurchaseListView] missing supplier_id, payload:', purchaseEntryData);
+        notification.showError('请先选择有效的供应商');
+        setSubmitting(false);
+        return;
+      }
+      if (!purchaseEntryData.base_id) {
+        console.warn('[PurchaseListView] missing base_id, payload:', purchaseEntryData);
+        notification.showError('请选择所属基地');
+        setSubmitting(false);
+        return;
+      }
+      const invalidItem = purchaseEntryData.items.find((it: any) => !it.product_name || it.quantity <= 0 || it.unit_price <= 0);
+      if (invalidItem) {
+        console.warn('[PurchaseListView] invalid item in payload:', invalidItem, purchaseEntryData.items);
+        notification.showError('请完善明细：商品/数量/单价');
+        setSubmitting(false);
+        return;
+      }
       
       if (isEditing) {
         console.log('更新采购记录:', editingPurchase.id, purchaseEntryData);
@@ -170,13 +207,13 @@ const PurchaseListView: React.FC = () => {
         result = await apiClient.updatePurchase(editingPurchase.id!, purchaseEntryData);
         notification.showSuccess('采购记录更新成功');
       } else {
-        console.log('创建新采购记录:', purchaseEntryData);
+        console.log('[PurchaseListView] 创建新采购记录 payload:', purchaseEntryData);
         // 使用实例方法而不是静态方法
         result = await apiClient.createPurchase(purchaseEntryData);
         notification.showSuccess('采购记录创建成功');
       }
       
-      console.log('采购操作结果:', result);
+      console.log('[PurchaseListView] 采购操作结果:', result);
       
       // 关闭对话框
       setEditDialogOpen(false);
@@ -339,6 +376,7 @@ const PurchaseListView: React.FC = () => {
         showCategoryFilter={false}
         showSupplierFilter={true}
         showOrderNumberFilter={true}
+        initialFilters={filters}
       />
       
       {/* 批量操作栏 */}

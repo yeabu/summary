@@ -11,11 +11,11 @@ import (
 )
 
 type ExpenseReq struct {
-	Date       string  `json:"date"`
-	CategoryID uint    `json:"category_id"` // 修改为 category_id
-	Amount     float64 `json:"amount"`
-	Detail     string  `json:"detail"`
-	BaseID     uint    `json:"base_id"` // 修改为 base_id，用于admin用户指定基地
+    Date       string  `json:"date"`
+    CategoryID uint    `json:"category_id"` // 修改为 category_id
+    Amount     float64 `json:"amount"`
+    Detail     string  `json:"detail"`
+    BaseID     uint    `json:"base_id"` // base_id：管理员可指定任一基地
 }
 
 func CreateExpense(w http.ResponseWriter, r *http.Request) {
@@ -59,32 +59,29 @@ func CreateExpense(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 确定基地信息
-	var baseID uint
-	var baseName string
-	if role == "admin" {
-		// 修复：admin用户具备所有权限，可以不指定基地（默认为所有基地）
-		// 如果指定了基地ID，则使用指定的基地；否则不指定基地（适用于查询所有基地的统计等场景）
-		if req.BaseID != 0 {
-			baseID = req.BaseID
-			// 查询基地名称用于验证
-			var base models.Base
-			if err := db.DB.First(&base, baseID).Error; err != nil {
-				http.Error(w, "指定的基地不存在", http.StatusBadRequest)
-				return
-			}
-			baseName = base.Name
-		}
-		// 如果admin用户没有指定基地ID，允许操作（不强制指定基地）
-	} else {
-		// base_agent使用自己的基地，需要通过基地名称查找ID
-		baseName = claims["base"].(string)
-		var base models.Base
-		if err := db.DB.Where("name = ?", baseName).First(&base).Error; err != nil {
-			http.Error(w, "用户基地信息错误", http.StatusBadRequest)
-			return
-		}
-		baseID = base.ID
-	}
+    var baseID uint
+    var baseName string
+    if role == "admin" {
+        // 管理员：若指定了 base_id，校验并使用；未指定则允许创建为平台级记录（BaseID 为空）
+        if req.BaseID != 0 {
+            baseID = req.BaseID
+            var base models.Base
+            if err := db.DB.First(&base, baseID).Error; err != nil {
+                http.Error(w, "指定的基地不存在", http.StatusBadRequest)
+                return
+            }
+            baseName = base.Name
+        }
+    } else {
+        // base_agent使用自己的基地，需要通过基地名称查找ID
+        baseName = claims["base"].(string)
+        var base models.Base
+        if err := db.DB.Where("name = ?", baseName).First(&base).Error; err != nil {
+            http.Error(w, "用户基地信息错误", http.StatusBadRequest)
+            return
+        }
+        baseID = base.ID
+    }
 
 	t, _ := time.Parse("2006-01-02", req.Date)
 	
@@ -123,22 +120,31 @@ func ListExpense(w http.ResponseWriter, r *http.Request) {
 	}
 	var expenses []models.BaseExpense
 	query := db.DB.Preload("Base").Preload("Category").Order("date desc")
-	if role := claims["role"].(string); role == "base_agent" {
-		baseName := claims["base"].(string)
-		// 通过基地名称查找基地ID
-		var base models.Base
-		if err := db.DB.Where("name = ?", baseName).First(&base).Error; err == nil {
-			query = query.Where("base_id = ?", base.ID)
-		}
-	} else if role == "admin" {
-		if base := r.URL.Query().Get("base"); base != "" {
-			// 支持通过基地名称过滤
-			var baseModel models.Base
-			if err := db.DB.Where("name = ?", base).First(&baseModel).Error; err == nil {
-				query = query.Where("base_id = ?", baseModel.ID)
-			}
-		}
-	}
+    if role := claims["role"].(string); role == "base_agent" {
+        baseName := claims["base"].(string)
+        // 通过基地名称查找基地ID
+        var base models.Base
+        if err := db.DB.Where("name = ?", baseName).First(&base).Error; err == nil {
+            query = query.Where("base_id = ?", base.ID)
+        }
+    } else if role == "admin" {
+        // 管理员可按多种方式过滤：base_id / base_code / base(名称)
+        if bid := r.URL.Query().Get("base_id"); bid != "" {
+            if id, err := strconv.ParseUint(bid, 10, 64); err == nil {
+                query = query.Where("base_id = ?", uint(id))
+            }
+        } else if baseCode := r.URL.Query().Get("base_code"); baseCode != "" {
+            var baseModel models.Base
+            if err := db.DB.Where("code = ?", baseCode).First(&baseModel).Error; err == nil {
+                query = query.Where("base_id = ?", baseModel.ID)
+            }
+        } else if baseName := r.URL.Query().Get("base"); baseName != "" { // 兼容旧参数：base 为名称
+            var baseModel models.Base
+            if err := db.DB.Where("name = ?", baseName).First(&baseModel).Error; err == nil {
+                query = query.Where("base_id = ?", baseModel.ID)
+            }
+        }
+    }
 	if cat := r.URL.Query().Get("category"); cat != "" {
 		// 支持通过类别名称过滤
 		var category models.ExpenseCategory
@@ -224,7 +230,9 @@ func StatExpense(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "month参数错误", http.StatusBadRequest)
 		return
 	}
-	base := r.URL.Query().Get("base")
+    base := r.URL.Query().Get("base") // 兼容：名称
+    baseIDParam := r.URL.Query().Get("base_id")
+    baseCode := r.URL.Query().Get("base_code")
 	var result []ExpenseStat
 
 	// 修复日期范围查询 - 使用正确的月份结束日期
@@ -239,12 +247,21 @@ func StatExpense(w http.ResponseWriter, r *http.Request) {
 		Joins("LEFT JOIN bases ON bases.id = base_expenses.base_id").
 		Joins("LEFT JOIN expense_categories ON expense_categories.id = base_expenses.category_id").
 		Where("base_expenses.date >= ? AND base_expenses.date < ?", startDate, endDate)
-	if role := claims["role"].(string); role == "base_agent" {
-		baseName := claims["base"].(string)
-		group = group.Where("bases.name = ?", baseName)
-	} else if base != "" {
-		group = group.Where("bases.name = ?", base)
-	}
+    if role := claims["role"].(string); role == "base_agent" {
+        baseName := claims["base"].(string)
+        group = group.Where("bases.name = ?", baseName)
+    } else {
+        // 管理员：支持 base_id / base_code / base(名称)
+        if baseIDParam != "" {
+            if id, err := strconv.ParseUint(baseIDParam, 10, 64); err == nil {
+                group = group.Where("bases.id = ?", uint(id))
+            }
+        } else if baseCode != "" {
+            group = group.Where("bases.code = ?", baseCode)
+        } else if base != "" {
+            group = group.Where("bases.name = ?", base)
+        }
+    }
 	group = group.Group("bases.name, expense_categories.name, month").Order("bases.name, expense_categories.name")
 	group.Scan(&result)
 	json.NewEncoder(w).Encode(result)

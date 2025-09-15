@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { TextField, MenuItem, Button, Box, Typography, FormControl, InputLabel, Select, SelectChangeEvent } from "@mui/material";
+import { TextField, MenuItem, Button, Box, Typography, FormControl, InputLabel, Select, SelectChangeEvent, Stack } from "@mui/material";
 import dayjs from 'dayjs';
 import useAuthStore from '@/auth/AuthStore';
 import { Base, ExpenseCategory } from '@/api/AppDtos';
@@ -15,9 +15,10 @@ export interface ExpenseFormProps {
   }>;
   onSubmit: (v: any) => void;
   submitting?: boolean;
+  onCancel?: () => void;
 }
 
-export default function BaseExpenseForm({ initial, onSubmit, submitting }: ExpenseFormProps) {
+export default function BaseExpenseForm({ initial, onSubmit, submitting, onCancel }: ExpenseFormProps) {
   const user = useAuthStore((state) => state.user);
   const isAdmin = user?.role === 'admin';
   
@@ -180,9 +181,14 @@ export default function BaseExpenseForm({ initial, onSubmit, submitting }: Expen
         rows={2}
       />
       
-      <Button type="submit" variant="contained" disabled={submitting}>
-        {submitting ? '提交中...' : '提交'}
-      </Button>
+      <Stack direction="row" spacing={1} justifyContent="flex-end">
+        <Button onClick={onCancel} disabled={submitting}>
+          取消
+        </Button>
+        <Button type="submit" variant="contained" disabled={submitting}>
+          {submitting ? '提交中...' : '提交'}
+        </Button>
+      </Stack>
     </Box>
   )
 }

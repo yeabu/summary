@@ -4,15 +4,22 @@ import { getValidAccessTokenOrRefresh } from "../utils/authToken";
 // 应付款记录类型定义
 export interface PayableRecord {
   id: number;
-  purchase_entry_id: number;
+  purchase_entry_id?: number;
   supplier_id?: number; // 供应商ID
-  supplier?: string; // 供应商名称（关联字段）
+  supplier?: string | {
+    id: number;
+    name: string;
+    settlement_type?: 'immediate' | 'monthly' | 'flexible';
+    settlement_day?: number;
+  }; // 供应商对象或名称
   base_id: number;
   total_amount: number;
   paid_amount: number;
   remaining_amount: number;
   status: 'pending' | 'partial' | 'paid';
   due_date?: string;
+  period_month?: string;
+  period_half?: string;
   created_by: number;
   created_at: string;
   updated_at: string;
@@ -28,6 +35,17 @@ export interface PayableRecord {
       amount: number;
     }>;
   };
+  links?: Array<{
+    id: number;
+    amount: number;
+    created_at?: string;
+    purchase_entry: {
+      id: number;
+      order_number: string;
+      purchase_date: string;
+      total_amount?: number;
+    };
+  }>;
   base?: {
     id: number;
     name: string;
@@ -133,8 +151,13 @@ export class PayableApi {
   }
 
   // 按供应商统计
-  async getPayableBySupplier(): Promise<SupplierPayableStats[]> {
-    return apiCall<SupplierPayableStats[]>('/api/payable/by-supplier');
+  async getPayableBySupplier(params?: { month?: string; start_date?: string; end_date?: string }): Promise<SupplierPayableStats[]> {
+    const q = new URLSearchParams();
+    if (params?.month) q.append('month', params.month);
+    if (params?.start_date) q.append('start_date', params.start_date);
+    if (params?.end_date) q.append('end_date', params.end_date);
+    const url = `/api/payable/by-supplier${q.toString() ? '?' + q.toString() : ''}`;
+    return apiCall<SupplierPayableStats[]>(url);
   }
 
   // 获取超期应付款

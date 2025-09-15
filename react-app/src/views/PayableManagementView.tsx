@@ -34,6 +34,7 @@ import {
   FilterList as FilterListIcon,
   Refresh as RefreshIcon,
   Assignment as AssignmentIcon,
+  Info as InfoIcon,
 } from '@mui/icons-material';
 import { PayableApi, PayableRecord, PayableSummaryResponse, PayableStatusText, CreatePaymentRequest } from '../api/PayableApi';
 import PaginationControl from '../components/PaginationControl';
@@ -363,10 +364,14 @@ export const PayableManagementView: React.FC = () => {
                       <Typography variant="body2" fontWeight="bold">
                         {typeof payable.supplier === 'object' ? (payable.supplier as any).name : payable.supplier}
                       </Typography>
-                      {payable.purchase_entry && (
-                        <Typography variant="caption" color="textSecondary">
-                          订单号: {payable.purchase_entry.order_number}
-                        </Typography>
+                      {payable.links && payable.links.length > 0 ? (
+                        <Chip size="small" label={`多笔（${payable.links.length}）`} sx={{ mt: 0.5 }} />
+                      ) : (
+                        payable.purchase_entry && (
+                          <Typography variant="caption" color="textSecondary">
+                            订单号: {payable.purchase_entry.order_number}
+                          </Typography>
+                        )
                       )}
                     </Box>
                   </TableCell>
@@ -391,7 +396,13 @@ export const PayableManagementView: React.FC = () => {
                     )}
                   </TableCell>
                   <TableCell>
-                    {payable.due_date ? formatDate(payable.due_date) : '-'}
+                    {payable.due_date ? (
+                      formatDate(payable.due_date)
+                    ) : (
+                      <Tooltip title="无明确到期日（灵活/开放式结算）">
+                        <Chip size="small" label="无到期" />
+                      </Tooltip>
+                    )}
                   </TableCell>
                   <TableCell>{payable.base?.name || '-'}</TableCell>
                   <TableCell>
@@ -483,22 +494,36 @@ export const PayableManagementView: React.FC = () => {
                 </Grid>
                 <Grid item xs={6}>
                   <Typography variant="subtitle2" color="textSecondary">到期日期</Typography>
-                  <Typography variant="body1">
-                    {selectedPayable.due_date ? formatDate(selectedPayable.due_date) : '-'}
-                  </Typography>
+                  {selectedPayable.due_date ? (
+                    <Typography variant="body1">{formatDate(selectedPayable.due_date)}</Typography>
+                  ) : (
+                    <Stack direction="row" spacing={0.5} alignItems="center">
+                      <Typography variant="body1">无</Typography>
+                      <Tooltip title="此应付款为灵活/开放式结算，未设置固定到期日">
+                        <InfoIcon fontSize="small" color="action" />
+                      </Tooltip>
+                    </Stack>
+                  )}
                 </Grid>
                 <Grid item xs={6}>
-                  <Typography variant="subtitle2" color="textSecondary">订单号</Typography>
-                  <Typography variant="body1">{selectedPayable.purchase_entry?.order_number || '-'}</Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="subtitle2" color="textSecondary">采购日期</Typography>
+                  <Typography variant="subtitle2" color="textSecondary">订单</Typography>
                   <Typography variant="body1">
-                    {selectedPayable.purchase_entry?.purchase_date ? formatDate(selectedPayable.purchase_entry.purchase_date) : '-'}
+                    {selectedPayable.links && selectedPayable.links.length > 0
+                      ? `多笔采购（${selectedPayable.links.length}）`
+                      : (selectedPayable.purchase_entry?.order_number || '-')}
                   </Typography>
                 </Grid>
+                {(!selectedPayable.links || selectedPayable.links.length === 0) && (
+                  <Grid item xs={6}>
+                    <Typography variant="subtitle2" color="textSecondary">采购日期</Typography>
+                    <Typography variant="body1">
+                      {selectedPayable.purchase_entry?.purchase_date ? formatDate(selectedPayable.purchase_entry.purchase_date) : '-'}
+                    </Typography>
+                  </Grid>
+                )}
                 {/* 添加采购商品详情 */}
-                {selectedPayable.purchase_entry?.items && selectedPayable.purchase_entry.items.length > 0 && (
+                {/* 单笔采购的明细展示 */}
+                {(!selectedPayable.links || selectedPayable.links.length === 0) && selectedPayable.purchase_entry?.items && selectedPayable.purchase_entry.items.length > 0 && (
                   <Grid item xs={12}>
                     <Typography variant="subtitle2" color="textSecondary">采购商品</Typography>
                     <TableContainer component={Paper} variant="outlined">
@@ -518,6 +543,33 @@ export const PayableManagementView: React.FC = () => {
                               <TableCell>{item.quantity}</TableCell>
                               <TableCell>{formatAmount(item.unit_price)}</TableCell>
                               <TableCell>{formatAmount(item.amount)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </Grid>
+                )}
+
+                {/* 聚合模式：展示关联的采购列表 */}
+                {selectedPayable.links && selectedPayable.links.length > 0 && (
+                  <Grid item xs={12}>
+                    <Typography variant="subtitle2" color="textSecondary">关联采购</Typography>
+                    <TableContainer component={Paper} variant="outlined">
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>订单号</TableCell>
+                            <TableCell>采购日期</TableCell>
+                            <TableCell>计入金额</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {selectedPayable.links.map(link => (
+                            <TableRow key={link.id}>
+                              <TableCell>{link.purchase_entry?.order_number || '-'}</TableCell>
+                              <TableCell>{link.purchase_entry?.purchase_date ? formatDate(link.purchase_entry.purchase_date) : '-'}</TableCell>
+                              <TableCell>{formatAmount(link.amount)}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
@@ -560,6 +612,64 @@ export const PayableManagementView: React.FC = () => {
             </Box>
           )}
         </DialogContent>
+        {/* 变更时间线：展示采购计入与还款的累计变化 */}
+        {selectedPayable && (
+          <Box sx={{ px: 3, pb: 2 }}>
+            <Typography variant="h6" gutterBottom>变更时间线</Typography>
+            {(() => {
+              const events: { time: string; label: string; delta: number }[] = [];
+              if (selectedPayable.links && selectedPayable.links.length > 0) {
+                selectedPayable.links.forEach(link => {
+                  const t = link.created_at || link.purchase_entry?.purchase_date || selectedPayable.created_at;
+                  events.push({ time: t, label: '采购计入', delta: link.amount });
+                });
+              }
+              if (selectedPayable.payment_records && selectedPayable.payment_records.length > 0) {
+                selectedPayable.payment_records.forEach(p => {
+                  const t = p.payment_date || p.created_at;
+                  events.push({ time: t, label: '还款', delta: -p.payment_amount });
+                });
+              }
+              events.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+              let running = 0;
+              return (
+                <TableContainer component={Paper} variant="outlined">
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>日期</TableCell>
+                        <TableCell>类型</TableCell>
+                        <TableCell>金额变化</TableCell>
+                        <TableCell>累计余额</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {events.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={4} align="center">暂无变更记录</TableCell>
+                        </TableRow>
+                      ) : (
+                        events.map((e, idx) => {
+                          running += e.delta;
+                          return (
+                            <TableRow key={idx}>
+                              <TableCell>{formatDate(e.time)}</TableCell>
+                              <TableCell>{e.label}</TableCell>
+                              <TableCell sx={{ color: e.delta >= 0 ? 'success.main' : 'error.main' }}>
+                                {formatAmount(e.delta)}
+                              </TableCell>
+                              <TableCell>{formatAmount(running)}</TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              );
+            })()}
+          </Box>
+        )}
         <DialogActions>
           <Button onClick={() => setDetailDialog(false)}>关闭</Button>
         </DialogActions>

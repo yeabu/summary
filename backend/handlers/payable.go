@@ -50,9 +50,12 @@ func ListPayable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var payables []models.PayableRecord
-	query := db.DB.Preload("PurchaseEntry").Preload("Base").Preload("Creator").Preload("Supplier").
-		Order("created_at desc")
+    var payables []models.PayableRecord
+    query := db.DB.
+        Preload("PurchaseEntry").
+        Preload("Links").Preload("Links.PurchaseEntry").
+        Preload("Base").Preload("Creator").Preload("Supplier").
+        Order("created_at desc")
 
 	// 权限过滤
 	if role == "base_agent" {
@@ -85,13 +88,13 @@ func ListPayable(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 日期范围筛选
-	if startDate := r.URL.Query().Get("start_date"); startDate != "" {
-		query = query.Where("created_at >= ?", startDate)
-	}
-	if endDate := r.URL.Query().Get("end_date"); endDate != "" {
-		query = query.Where("created_at <= ?", endDate+" 23:59:59")
-	}
+    // 日期范围筛选（为避免与JOIN造成的列名歧义，这里显式指定主表）
+    if startDate := r.URL.Query().Get("start_date"); startDate != "" {
+        query = query.Where("payable_records.created_at >= ?", startDate)
+    }
+    if endDate := r.URL.Query().Get("end_date"); endDate != "" {
+        query = query.Where("payable_records.created_at <= ?", endDate+" 23:59:59")
+    }
 
 	// 分页
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
@@ -145,18 +148,38 @@ func GetPayableSummary(w http.ResponseWriter, r *http.Request) {
 
 	var summary PayableSummaryResponse
 
-	// 总计统计
-	query.Select("SUM(total_amount) as total_payable, SUM(paid_amount) as total_paid, SUM(remaining_amount) as total_remaining").
-		Scan(&summary)
+    // 总计统计（单独查询，避免where叠加污染）
+    totalQ := db.DB.Model(&models.PayableRecord{})
+    if role == "base_agent" {
+        baseName := claims["base"].(string)
+        var base models.Base
+        if err := db.DB.Where("name = ?", baseName).First(&base).Error; err == nil {
+            totalQ = totalQ.Where("base_id = ?", base.ID)
+        }
+    }
+    totalQ.Select("SUM(total_amount) as total_payable, SUM(paid_amount) as total_paid, SUM(remaining_amount) as total_remaining").Scan(&summary)
 
-	// 状态统计
-	query.Where("status = ?", models.PayableStatusPending).Count(&summary.PendingCount)
-	query.Where("status = ?", models.PayableStatusPartial).Count(&summary.PartialCount)
-	query.Where("status = ?", models.PayableStatusPaid).Count(&summary.PaidCount)
+    // 各状态统计（分别独立查询）
+    pendingQ := db.DB.Model(&models.PayableRecord{})
+    partialQ := db.DB.Model(&models.PayableRecord{})
+    paidQ := db.DB.Model(&models.PayableRecord{})
+    overdueQ := db.DB.Model(&models.PayableRecord{})
+    if role == "base_agent" {
+        baseName := claims["base"].(string)
+        var base models.Base
+        if err := db.DB.Where("name = ?", baseName).First(&base).Error; err == nil {
+            pendingQ = pendingQ.Where("base_id = ?", base.ID)
+            partialQ = partialQ.Where("base_id = ?", base.ID)
+            paidQ = paidQ.Where("base_id = ?", base.ID)
+            overdueQ = overdueQ.Where("base_id = ?", base.ID)
+        }
+    }
+    pendingQ.Where("status = ?", models.PayableStatusPending).Count(&summary.PendingCount)
+    partialQ.Where("status = ?", models.PayableStatusPartial).Count(&summary.PartialCount)
+    paidQ.Where("status = ?", models.PayableStatusPaid).Count(&summary.PaidCount)
 
-	// 超期统计
-	now := time.Now()
-	query.Where("due_date < ? AND status != ?", now, models.PayableStatusPaid).Count(&summary.OverdueCount)
+    now := time.Now()
+    overdueQ.Where("due_date < ? AND status != ?", now, models.PayableStatusPaid).Count(&summary.OverdueCount)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(summary)
@@ -176,19 +199,36 @@ func GetPayableBySupplier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := db.DB.Model(&models.PayableRecord{}).
-		Select("suppliers.name as supplier, SUM(total_amount) as total_amount, SUM(paid_amount) as paid_amount, SUM(remaining_amount) as remaining_amount, COUNT(*) as record_count").
-		Joins("JOIN suppliers ON payable_records.supplier_id = suppliers.id").
-		Group("suppliers.name").
-		Order("remaining_amount desc")
+    query := db.DB.Model(&models.PayableRecord{}).
+        Select("suppliers.name as supplier, SUM(total_amount) as total_amount, SUM(paid_amount) as paid_amount, SUM(remaining_amount) as remaining_amount, COUNT(*) as record_count").
+        Joins("JOIN suppliers ON payable_records.supplier_id = suppliers.id")
+
+    // 时间筛选：支持 month(YYYY-MM) 或 start_date/end_date（按created_at）
+    if m := r.URL.Query().Get("month"); len(m) == 7 {
+        if t, err := time.Parse("2006-01", m); err == nil {
+            start := t.Format("2006-01-02")
+            end := t.AddDate(0, 1, 0).Format("2006-01-02")
+            // 指定主表，避免列名歧义
+            query = query.Where("payable_records.created_at >= ? AND payable_records.created_at < ?", start, end)
+        }
+    } else {
+        if sd := r.URL.Query().Get("start_date"); sd != "" {
+            query = query.Where("payable_records.created_at >= ?", sd)
+        }
+        if ed := r.URL.Query().Get("end_date"); ed != "" {
+            query = query.Where("payable_records.created_at < ?", ed+" 23:59:59")
+        }
+    }
+
+    query = query.Group("suppliers.name").Order("remaining_amount desc")
 
 	// 权限过滤
-	if role == "base_agent" {
-		baseName := claims["base"].(string)
-		var base models.Base
-		if err := db.DB.Where("name = ?", baseName).First(&base).Error; err == nil {
-			query = query.Where("base_id = ?", base.ID)
-		}
+    if role == "base_agent" {
+        baseName := claims["base"].(string)
+        var base models.Base
+        if err := db.DB.Where("name = ?", baseName).First(&base).Error; err == nil {
+            query = query.Where("base_id = ?", base.ID)
+        }
 	}
 	// 管理员可以查看所有记录，无需额外过滤
 
@@ -254,10 +294,12 @@ func GetPayableDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var payable models.PayableRecord
-	query := db.DB.Preload("PurchaseEntry").Preload("PurchaseEntry.Items").
-		Preload("Base").Preload("Creator").Preload("Supplier").
-		Preload("PaymentRecords").Preload("PaymentRecords.Creator")
+    var payable models.PayableRecord
+    query := db.DB.
+        Preload("PurchaseEntry").Preload("PurchaseEntry.Items").
+        Preload("Links").Preload("Links.PurchaseEntry").
+        Preload("Base").Preload("Creator").Preload("Supplier").
+        Preload("PaymentRecords").Preload("PaymentRecords.Creator")
 
 	// 权限过滤
 	if role == "base_agent" {
@@ -296,8 +338,17 @@ func CreatePayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	role := claims["role"].(string)
-	userID := uint(claims["user_id"].(float64))
+    role := claims["role"].(string)
+    // JWT中设置的键为 "uid"，而非 "user_id"；做健壮性处理
+    var userID uint
+    if v, ok := claims["uid"]; ok {
+        userID = uint(v.(float64))
+    } else if v, ok := claims["user_id"]; ok && v != nil {
+        userID = uint(v.(float64))
+    } else {
+        http.Error(w, "token缺少用户信息", http.StatusUnauthorized)
+        return
+    }
 
 	if role != "admin" && role != "base_agent" {
 		http.Error(w, "无权创建还款记录", http.StatusForbidden)
@@ -389,11 +440,11 @@ func CreatePayment(w http.ResponseWriter, r *http.Request) {
 	// 更新应付款记录
 	newPaidAmount := payable.PaidAmount + req.Amount
 	newRemainingAmount := payable.TotalAmount - newPaidAmount
-	newStatus := models.PayableStatusPartial
-	if newRemainingAmount <= 0.01 { // 考虑浮点数精度问题
-		newStatus = models.PayableStatusPaid
-		newRemainingAmount = 0
-	}
+    newStatus := models.PayableStatusPartial
+    if newRemainingAmount <= 0.000001 { // 考虑浮点数精度问题
+        newStatus = models.PayableStatusPaid
+        newRemainingAmount = 0
+    }
 
 	updates := map[string]interface{}{
 		"paid_amount":      newPaidAmount,
@@ -550,12 +601,12 @@ func DeletePayment(w http.ResponseWriter, r *http.Request) {
 
 	newRemainingAmount := payable.TotalAmount - totalPaid
 	newStatus := models.PayableStatusPending
-	if totalPaid > 0 && newRemainingAmount > 0.01 {
-		newStatus = models.PayableStatusPartial
-	} else if newRemainingAmount <= 0.01 {
-		newStatus = models.PayableStatusPaid
-		newRemainingAmount = 0
-	}
+    if totalPaid > 0 && newRemainingAmount > 0.000001 {
+        newStatus = models.PayableStatusPartial
+    } else if newRemainingAmount <= 0.000001 {
+        newStatus = models.PayableStatusPaid
+        newRemainingAmount = 0
+    }
 
 	updates := map[string]interface{}{
 		"paid_amount":      totalPaid,

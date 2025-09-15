@@ -53,8 +53,20 @@ func main() {
 	// 加载 .env 文件
 	loadEnv()
 
-	db.Init()
-	db.DB.AutoMigrate(&models.User{}, &models.Base{}, &models.BaseSection{}, &models.PurchaseEntry{}, &models.PurchaseEntryItem{}, &models.BaseExpense{}, &models.PayableRecord{}, &models.PaymentRecord{}, &models.ExpenseCategory{})
+    db.Init()
+    db.DB.AutoMigrate(
+        &models.User{},
+        &models.Base{},
+        &models.BaseSection{},
+        &models.PurchaseEntry{},
+        &models.PurchaseEntryItem{},
+        &models.BaseExpense{},
+        &models.PayableRecord{},
+        &models.PayableLink{},
+        &models.PaymentRecord{},
+        &models.ExpenseCategory{},
+        &models.Supplier{},
+    )
 	addr := ":8080"
 	if os.Getenv("PORT") != "" {
 		addr = ":" + os.Getenv("PORT")

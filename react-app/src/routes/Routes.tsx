@@ -9,12 +9,15 @@ import NewUserLandingView from '../views/NewUserLandingView';
 import PasswordResetView from '../views/PasswordResetView';
 import BaseExpenseListView from '../views/BaseExpenseListView';
 import BaseExpenseStatsView from '../views/BaseExpenseStatsView';
+import AnalyticsView from '../views/AnalyticsView';
 import PurchaseListView from '../views/PurchaseListView';
 import BaseManagementView from '../views/BaseManagementView';
 import BaseSectionManagementView from '../views/BaseSectionManagementView';
 import UserManagementView from '../views/UserManagementView';
 import PayableUnifiedView from '../views/PayableUnifiedView';
 import SupplierManagementView from '../views/SupplierManagementView';
+import SupplierPieStatsView from '../views/SupplierPieStatsView';
+import PayableTimelineView from '../views/PayableTimelineView';
 import { ADMIN_ROLE } from '../utils/roles';
 
 /**
@@ -39,11 +42,13 @@ const App = () => {
             {/* 应付款管理（合并了原来的应付款管理和欠款统计功能） */}
             <Route path="payable/list" element={<PayableUnifiedView />} />
             <Route path="payable/stats" element={<PayableUnifiedView />} />
+            <Route path="payable/supplier-stats" element={<SupplierPieStatsView />} />
+            <Route path="payable/timeline/:id" element={<PayableTimelineView />} />
             {/* 供应商管理 */}
             <Route path="supplier/management" element={<SupplierManagementView />} />
             {/* ONLY admin 见统计分析和采购管理，采用roles嵌套路由 */}
             <Route element={<ProtectedRoute roles={[ADMIN_ROLE]} />}> 
-              <Route path="expense/stats" element={<BaseExpenseStatsView />} />
+              <Route path="expense/stats" element={<AnalyticsView />} />
               <Route path="purchase/list" element={<PurchaseListView />} />
               <Route path="base/management" element={<BaseManagementView />} />
               <Route path="base/section-management" element={<BaseSectionManagementView />} />

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
   Paper,
@@ -41,17 +42,19 @@ import {
   TrendingUp as TrendingUpIcon,
   Warning as WarningIcon,
   FileDownload as FileDownloadIcon,
-  Edit as EditIcon,
+  Info as InfoIcon,
 } from '@mui/icons-material';
-import { PayableApi, PayableRecord, PayableSummaryResponse, SupplierPayableStats, PayableStatusText, CreatePaymentRequest } from '../api/PayableApi';
+import { PayableApi, PayableRecord, PayableSummaryResponse, PayableStatusText, CreatePaymentRequest } from '../api/PayableApi';
 import PaginationControl from '../components/PaginationControl';
 import { PageLoading } from '../components/LoadingComponents';
 import { useNotification } from '../components/NotificationProvider';
 import { PaymentDialog } from '../components/PaymentDialog';
+// 图表与跨模块汇总功能已迁移至统计分析页面
 
 export const PayableUnifiedView: React.FC = () => {
   const notification = useNotification();
   const payableApi = new PayableApi();
+  const navigate = useNavigate();
 
   // 状态管理
   const [payables, setPayables] = useState<PayableRecord[]>([]);
@@ -63,18 +66,28 @@ export const PayableUnifiedView: React.FC = () => {
   
   // 统计数据
   const [summary, setSummary] = useState<PayableSummaryResponse | null>(null);
-  const [supplierStats, setSupplierStats] = useState<SupplierPayableStats[]>([]);
-  const [overduePayables, setOverduePayables] = useState<PayableRecord[]>([]);
+  // 已简化：去除本页中的供应商欠款与超期列表，保留汇总卡片
   const [showStats, setShowStats] = useState(true);
+  // 已移除：统计分析相关本地状态与导出函数（迁移至统计分析页面）
+  // 统计清单弹窗
+  const [statsDialogOpen, setStatsDialogOpen] = useState(false);
+  const [statsDialogTitle, setStatsDialogTitle] = useState('');
+  const [statsDialogLoading, setStatsDialogLoading] = useState(false);
+  const [statsDialogRecords, setStatsDialogRecords] = useState<PayableRecord[]>([]);
   
-  // 筛选条件
-  const [filters, setFilters] = useState({
-    supplier: '',
-    status: '',
-    base: '',
-    start_date: '',
-    end_date: '',
-  });
+  // 筛选条件（支持从URL初始化）
+  const location = useLocation();
+  const initialFilters = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return {
+      supplier: params.get('supplier') || '',
+      status: params.get('status') || '',
+      base: params.get('base') || '',
+      start_date: params.get('start_date') || '',
+      end_date: params.get('end_date') || '',
+    };
+  }, [location.search]);
+  const [filters, setFilters] = useState(initialFilters);
   const [showFilters, setShowFilters] = useState(false);
   
   // 详情对话框
@@ -85,10 +98,7 @@ export const PayableUnifiedView: React.FC = () => {
   const [paymentDialog, setPaymentDialog] = useState(false);
   const [paymentTarget, setPaymentTarget] = useState<PayableRecord | null>(null);
   
-  // 编辑状态对话框
-  const [editStatusDialog, setEditStatusDialog] = useState(false);
-  const [editingPayable, setEditingPayable] = useState<PayableRecord | null>(null);
-  const [newStatus, setNewStatus] = useState('');
+  // 已移除编辑状态功能，状态由金额自动计算
 
   // 加载应付款列表
   const loadPayables = async () => {
@@ -113,15 +123,8 @@ export const PayableUnifiedView: React.FC = () => {
   // 加载统计数据
   const loadStatistics = async () => {
     try {
-      const [summaryData, supplierData, overdueData] = await Promise.all([
-        payableApi.getPayableSummary(),
-        payableApi.getPayableBySupplier(),
-        payableApi.getOverduePayables(),
-      ]);
-      
+      const summaryData = await payableApi.getPayableSummary();
       setSummary(summaryData);
-      setSupplierStats(supplierData);
-      setOverduePayables(overdueData);
     } catch (err: any) {
       console.error('加载统计数据失败:', err);
     }
@@ -158,29 +161,7 @@ export const PayableUnifiedView: React.FC = () => {
     setPaymentTarget(null);
   };
 
-  // 编辑状态
-  const handleEditStatus = (payable: PayableRecord) => {
-    setEditingPayable(payable);
-    setNewStatus(payable.status);
-    setEditStatusDialog(true);
-  };
-
-  // 保存状态修改
-  const handleSaveStatus = async () => {
-    if (!editingPayable) return;
-    
-    try {
-      await payableApi.updatePayableStatus(editingPayable.id, newStatus);
-      notification.showSuccess('状态更新成功');
-      setEditStatusDialog(false);
-      setEditingPayable(null);
-      // 刷新数据
-      loadPayables();
-      loadStatistics();
-    } catch (err: any) {
-      notification.showError('更新状态失败: ' + (err.message || '未知错误'));
-    }
-  };
+  // 无编辑状态逻辑
 
   // 状态颜色映射
   const getStatusColor = (status: string) => {
@@ -204,6 +185,22 @@ export const PayableUnifiedView: React.FC = () => {
       style: 'currency',
       currency: 'CNY'
     });
+  };
+
+  // 结算方式展示
+  const settlementLabel = (t?: string) => {
+    switch (t) {
+      case 'monthly': return '月结';
+      case 'immediate': return '即付';
+      case 'flexible': return '灵活';
+      default: return '灵活';
+    }
+  };
+
+  const halfLabel = (half?: string) => {
+    if (!half) return '-';
+    const [y, h] = half.split('-');
+    return `${y}年${h === 'H1' ? '上半年' : '下半年'}`;
   };
 
   // 格式化日期
@@ -252,6 +249,33 @@ export const PayableUnifiedView: React.FC = () => {
     notification.showSuccess('数据已刷新');
   };
 
+  // 已迁移的未结货款统计逻辑删除
+
+  // 统计清单导出（CSV）
+  const exportStatsDialogCsv = () => {
+    if (!statsDialogRecords || statsDialogRecords.length === 0) return;
+    const headers = ['供应商','总金额','已付','剩余','状态','到期','基地'];
+    const rows = statsDialogRecords.map(r => [
+      typeof r.supplier === 'object' ? (r.supplier as any).name : (r.supplier as any) || '',
+      r.total_amount,
+      r.paid_amount,
+      r.remaining_amount,
+      PayableStatusText[r.status],
+      r.due_date ? formatDate(r.due_date) : '-',
+      r.base?.name || '-',
+    ]);
+    const csv = [headers, ...rows].map(cols => cols.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '统计清单.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // 已迁移的按供应商清单逻辑删除
+
   // 导出数据
   const handleExport = () => {
     if (!payables.length) {
@@ -286,6 +310,30 @@ export const PayableUnifiedView: React.FC = () => {
     document.body.removeChild(link);
     
     notification.showSuccess('数据导出成功');
+  };
+
+  // 打开统计清单（按状态或超期）
+  const openStatsList = async (type: 'pending' | 'partial' | 'paid' | 'overdue') => {
+    try {
+      setStatsDialogLoading(true);
+      setStatsDialogOpen(true);
+      let title = '';
+      let records: PayableRecord[] = [];
+      if (type === 'overdue') {
+        title = '超期应付款清单';
+        records = await payableApi.getOverduePayables();
+      } else {
+        title = (type === 'pending' ? '待付款' : type === 'partial' ? '部分付款' : '已付清') + ' 清单';
+        const res = await payableApi.getPayableList({ status: type, page: 1, limit: 100 });
+        records = res.records;
+      }
+      setStatsDialogTitle(title);
+      setStatsDialogRecords(records);
+    } catch (e: any) {
+      notification.showError(e.message || '加载统计清单失败');
+    } finally {
+      setStatsDialogLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -399,8 +447,45 @@ export const PayableUnifiedView: React.FC = () => {
                 </CardContent>
               </Card>
             </Grid>
+            {/* 数量统计：可点击查看清单 */}
+            <Grid item xs={12} md={3}>
+              <Card sx={{ cursor: 'pointer' }} onClick={() => openStatsList('pending')}>
+                <CardContent>
+                  <Typography color="textSecondary" gutterBottom>待付款数量</Typography>
+                  <Typography variant="h5">{summary.pending_count}</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} md={3}>
+              <Card sx={{ cursor: 'pointer' }} onClick={() => openStatsList('partial')}>
+                <CardContent>
+                  <Typography color="textSecondary" gutterBottom>部分付款数量</Typography>
+                  <Typography variant="h5">{summary.partial_count}</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} md={3}>
+              <Card sx={{ cursor: 'pointer' }} onClick={() => openStatsList('paid')}>
+                <CardContent>
+                  <Typography color="textSecondary" gutterBottom>已付清数量</Typography>
+                  <Typography variant="h5">{summary.paid_count}</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} md={3}>
+              <Card sx={{ cursor: 'pointer' }} onClick={() => openStatsList('overdue')}>
+                <CardContent>
+                  <Typography color="textSecondary" gutterBottom>超期数量</Typography>
+                  <Typography variant="h5">{summary.overdue_count}</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
           </Grid>
         )}
+
+        {/* 统计分析模块已迁移到“统计分析”页面 */}
+
+        {/* 未结货款（按供应商）模块已迁移到“统计分析”页面 */}
       </Collapse>
 
       {/* 筛选条件 */}
@@ -496,9 +581,14 @@ export const PayableUnifiedView: React.FC = () => {
               {payables.map((payable) => (
                 <TableRow key={payable.id} hover>
                   <TableCell>
-                    <Typography variant="body2" fontWeight="medium">
-                      {typeof payable.supplier === 'object' ? (payable.supplier as any).name : payable.supplier}
-                    </Typography>
+                    <Box component="div" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+                      <Typography component="span" variant="body2" fontWeight="medium">
+                        {typeof payable.supplier === 'object' ? (payable.supplier as any).name : payable.supplier}
+                      </Typography>
+                      {typeof payable.supplier === 'object' && (
+                        <Chip size="small" label={settlementLabel((payable.supplier as any).settlement_type)} />
+                      )}
+                    </Box>
                   </TableCell>
                   <TableCell align="right">
                     {formatAmount(payable.total_amount)}
@@ -528,7 +618,13 @@ export const PayableUnifiedView: React.FC = () => {
                     )}
                   </TableCell>
                   <TableCell>
-                    {payable.due_date ? formatDate(payable.due_date) : '-'}
+                    {payable.due_date ? (
+                      formatDate(payable.due_date)
+                    ) : (
+                      <Tooltip title="无明确到期日（灵活/开放式结算）">
+                        <Chip size="small" label="无到期" />
+                      </Tooltip>
+                    )}
                   </TableCell>
                   <TableCell align="center">
                     <Tooltip title="查看详情">
@@ -550,15 +646,7 @@ export const PayableUnifiedView: React.FC = () => {
                         </IconButton>
                       </Tooltip>
                     )}
-                    <Tooltip title="编辑状态">
-                      <IconButton 
-                        size="small" 
-                        onClick={() => handleEditStatus(payable)}
-                        color="secondary"
-                      >
-                        <EditIcon />
-                      </IconButton>
-                    </Tooltip>
+                    {/* 编辑状态功能已移除 */}
                   </TableCell>
                 </TableRow>
               ))}
@@ -605,7 +693,12 @@ export const PayableUnifiedView: React.FC = () => {
             <Box sx={{ pt: 1 }}>
               <Grid container spacing={2}>
                 <Grid item xs={6}>
-                  <Typography variant="body2"><strong>供应商：</strong> {typeof selectedPayable.supplier === 'object' ? (selectedPayable.supplier as any).name : selectedPayable.supplier}</Typography>
+                  <Typography variant="body2">
+                    <strong>供应商：</strong> {typeof selectedPayable.supplier === 'object' ? (selectedPayable.supplier as any).name : selectedPayable.supplier}
+                    {typeof selectedPayable.supplier === 'object' && (
+                      <Chip size="small" sx={{ ml: 1 }} label={`结算方式：${settlementLabel((selectedPayable.supplier as any).settlement_type)}`}/>
+                    )}
+                  </Typography>
                 </Grid>
                 <Grid item xs={6}>
                   <Typography variant="body2"><strong>基地：</strong> {selectedPayable.base?.name || '-'}</Typography>
@@ -623,10 +716,17 @@ export const PayableUnifiedView: React.FC = () => {
                   <Typography variant="body2"><strong>状态：</strong> {PayableStatusText[selectedPayable.status]}</Typography>
                 </Grid>
                 <Grid item xs={6}>
-                  <Typography variant="body2"><strong>到期日期：</strong> {selectedPayable.due_date ? formatDate(selectedPayable.due_date) : '-'}</Typography>
+                  <Typography variant="body2"><strong>到期日期：</strong> {selectedPayable.due_date ? (
+                    formatDate(selectedPayable.due_date)
+                  ) : (
+                    <span>无 <Tooltip title="此应付款为灵活/开放式结算，未设置固定到期日"><InfoIcon fontSize="small" /></Tooltip></span>
+                  )}</Typography>
                 </Grid>
                 <Grid item xs={6}>
                   <Typography variant="body2"><strong>创建时间：</strong> {formatDate(selectedPayable.created_at)}</Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="body2"><strong>累计周期：</strong> {selectedPayable.period_month ? selectedPayable.period_month : halfLabel((selectedPayable as any).period_half)}</Typography>
                 </Grid>
               </Grid>
 
@@ -656,10 +756,43 @@ export const PayableUnifiedView: React.FC = () => {
                   </Table>
                 </Box>
               )}
+
+              {/* 货款清单（累计来源明细） */}
+              {selectedPayable.links && selectedPayable.links.length > 0 && (
+                <Box sx={{ mt: 3 }}>
+                  <Typography variant="h6" gutterBottom>货款清单（累计明细）</Typography>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>订单号</TableCell>
+                        <TableCell>采购日期</TableCell>
+                        <TableCell align="right">计入金额</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {selectedPayable.links.map((link: any) => (
+                        <TableRow key={link.id}>
+                          <TableCell>{link.purchase_entry?.order_number || '-'}</TableCell>
+                          <TableCell>{link.purchase_entry?.purchase_date ? formatDate(link.purchase_entry.purchase_date) : '-'}</TableCell>
+                          <TableCell align="right">{formatAmount(link.amount)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </Box>
+              )}
+
+              {/* 变更时间线（采购计入 + 还款），支持筛选与导出 */}
+              <Box sx={{ mt: 3 }}>
+                <TimelineSection payable={selectedPayable} />
+              </Box>
             </Box>
           )}
         </DialogContent>
         <DialogActions>
+          {selectedPayable && (
+            <Button onClick={() => window.open(`/payable/timeline/${selectedPayable.id}`, '_blank')}>独立页面打开时间线</Button>
+          )}
           <Button onClick={() => setDetailDialog(false)}>关闭</Button>
         </DialogActions>
       </Dialog>
@@ -674,49 +807,158 @@ export const PayableUnifiedView: React.FC = () => {
           onCreatePayment={handleCreatePayment}
         />
       )}
-      
-      {/* 编辑状态对话框 */}
-      <Dialog open={editStatusDialog} onClose={() => setEditStatusDialog(false)}>
-        <DialogTitle>编辑应付款状态</DialogTitle>
+
+      {/* 统计清单弹窗 */}
+      <Dialog open={statsDialogOpen} onClose={() => setStatsDialogOpen(false)} maxWidth="lg" fullWidth>
+        <DialogTitle>{statsDialogTitle || '清单'}</DialogTitle>
         <DialogContent>
-          {editingPayable && (
-            <Box sx={{ pt: 2 }}>
-              <Grid container spacing={2}>
-                <Grid item xs={12}>
-                  <Typography variant="body1">
-                    <strong>供应商:</strong> {typeof editingPayable.supplier === 'object' ? (editingPayable.supplier as any).name : editingPayable.supplier}
-                  </Typography>
-                </Grid>
-                <Grid item xs={12}>
-                  <Typography variant="body1">
-                    <strong>当前状态:</strong> {PayableStatusText[editingPayable.status]}
-                  </Typography>
-                </Grid>
-                <Grid item xs={12}>
-                  <FormControl fullWidth>
-                    <InputLabel>新状态</InputLabel>
-                    <Select
-                      value={newStatus}
-                      label="新状态"
-                      onChange={(e) => setNewStatus(e.target.value)}
-                    >
-                      <MenuItem value="pending">待付款</MenuItem>
-                      <MenuItem value="partial">部分付款</MenuItem>
-                      <MenuItem value="paid">已付清</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
-              </Grid>
-            </Box>
+          {statsDialogLoading ? (
+            <Typography sx={{ p: 2 }}>加载中...</Typography>
+          ) : statsDialogRecords.length === 0 ? (
+            <Typography sx={{ p: 2 }}>暂无记录</Typography>
+          ) : (
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>供应商</TableCell>
+                  <TableCell>总金额</TableCell>
+                  <TableCell>已付</TableCell>
+                  <TableCell>剩余</TableCell>
+                  <TableCell>状态</TableCell>
+                  <TableCell>到期</TableCell>
+                  <TableCell>基地</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {statsDialogRecords.map(r => (
+                  <TableRow key={r.id} hover>
+                    <TableCell>{typeof r.supplier === 'object' ? (r.supplier as any).name : r.supplier}</TableCell>
+                    <TableCell>{formatAmount(r.total_amount)}</TableCell>
+                    <TableCell>{formatAmount(r.paid_amount)}</TableCell>
+                    <TableCell>{formatAmount(r.remaining_amount)}</TableCell>
+                    <TableCell><Chip size="small" label={PayableStatusText[r.status]} color={getStatusColor(r.status) as any} /></TableCell>
+                    <TableCell>{r.due_date ? formatDate(r.due_date) : '-'}</TableCell>
+                    <TableCell>{r.base?.name || '-'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setEditStatusDialog(false)}>取消</Button>
-          <Button onClick={handleSaveStatus} variant="contained" color="primary">保存</Button>
+          <Button onClick={exportStatsDialogCsv} disabled={statsDialogRecords.length === 0}>导出CSV</Button>
+          <Button onClick={() => setStatsDialogOpen(false)}>关闭</Button>
         </DialogActions>
       </Dialog>
+      
     </Box>
   );
 };
 
 export default PayableUnifiedView;
+
+// 子组件：变更时间线（筛选 + 导出）
+const TimelineSection: React.FC<{ payable: PayableRecord }> = ({ payable }) => {
+  const [includeIn, setIncludeIn] = useState(true);   // 采购计入
+  const [includeOut, setIncludeOut] = useState(true); // 还款
+  const [start, setStart] = useState('');
+  const [end, setEnd] = useState('');
+
+  const formatAmount = (amount: number) => amount.toLocaleString('zh-CN', { style: 'currency', currency: 'CNY' });
+  const formatDate = (d: string) => new Date(d).toLocaleDateString('zh-CN');
+
+  const allEvents = React.useMemo(() => {
+    const ev: { time: string; type: 'in' | 'out'; label: string; delta: number }[] = [];
+    if (payable.links && payable.links.length) {
+      payable.links.forEach((link: any) => {
+        const t = link.created_at || link.purchase_entry?.purchase_date || payable.created_at;
+        ev.push({ time: t, type: 'in', label: '采购计入', delta: link.amount });
+      });
+    }
+    if (payable.payment_records && payable.payment_records.length) {
+      payable.payment_records.forEach((p: any) => {
+        const t = p.payment_date || p.created_at;
+        ev.push({ time: t, type: 'out', label: '还款', delta: -p.payment_amount });
+      });
+    }
+    return ev.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+  }, [payable]);
+
+  const filtered = allEvents.filter(e => {
+    if (e.type === 'in' && !includeIn) return false;
+    if (e.type === 'out' && !includeOut) return false;
+    if (start && new Date(e.time) < new Date(start)) return false;
+    if (end) {
+      const endDate = new Date(end);
+      endDate.setHours(23,59,59,999);
+      if (new Date(e.time) > endDate) return false;
+    }
+    return true;
+  });
+
+  const exportCSV = () => {
+    let running = 0;
+    const rows = [['日期', '类型', '金额变化', '累计余额']];
+    filtered.forEach(e => {
+      running += e.delta;
+      rows.push([formatDate(e.time), e.label, e.delta.toString(), running.toString()]);
+    });
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `应付款变更时间线_${payable.id}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  let running = 0;
+
+  return (
+    <Paper variant="outlined" sx={{ p: 2 }}>
+      <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
+        <Typography variant="h6" sx={{ flex: 1 }}>变更时间线</Typography>
+        <FormControl size="small">
+          <Stack direction="row" spacing={1} alignItems="center">
+            <label><input type="checkbox" checked={includeIn} onChange={(e) => setIncludeIn(e.target.checked)} /> 采购计入</label>
+            <label><input type="checkbox" checked={includeOut} onChange={(e) => setIncludeOut(e.target.checked)} /> 还款</label>
+            <TextField size="small" type="date" label="开始" InputLabelProps={{ shrink: true }} value={start} onChange={e => setStart(e.target.value)} />
+            <TextField size="small" type="date" label="结束" InputLabelProps={{ shrink: true }} value={end} onChange={e => setEnd(e.target.value)} />
+            <Button variant="outlined" startIcon={<FileDownloadIcon />} onClick={exportCSV}>导出CSV</Button>
+          </Stack>
+        </FormControl>
+      </Stack>
+
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>日期</TableCell>
+            <TableCell>类型</TableCell>
+            <TableCell>金额变化</TableCell>
+            <TableCell>累计余额</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {filtered.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={4} align="center">暂无记录</TableCell>
+            </TableRow>
+          ) : (
+            filtered.map((e, idx) => {
+              running += e.delta;
+              return (
+                <TableRow key={idx}>
+                  <TableCell>{formatDate(e.time)}</TableCell>
+                  <TableCell>{e.label}</TableCell>
+                  <TableCell sx={{ color: e.delta >= 0 ? 'success.main' : 'error.main' }}>{formatAmount(e.delta)}</TableCell>
+                  <TableCell>{formatAmount(running)}</TableCell>
+                </TableRow>
+              );
+            })
+          )}
+        </TableBody>
+      </Table>
+    </Paper>
+  );
+};

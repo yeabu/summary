@@ -20,6 +20,7 @@ import {
   IconButton,
   Tooltip,
   Chip,
+  MenuItem,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -49,6 +50,8 @@ export const SupplierManagementView: React.FC = () => {
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [formData, setFormData] = useState({
     name: '',
+    settlement_type: 'flexible' as 'immediate' | 'monthly' | 'flexible',
+    settlement_day: '' as number | '',
     contact_person: '',
     phone: '',
     email: '',
@@ -91,6 +94,8 @@ export const SupplierManagementView: React.FC = () => {
     setEditingSupplier(null);
     setFormData({
       name: '',
+      settlement_type: 'flexible',
+      settlement_day: '',
       contact_person: '',
       phone: '',
       email: '',
@@ -104,6 +109,8 @@ export const SupplierManagementView: React.FC = () => {
     setEditingSupplier(supplier);
     setFormData({
       name: supplier.name,
+      settlement_type: (supplier as any).settlement_type || 'flexible',
+      settlement_day: (supplier as any).settlement_day || '',
       contact_person: supplier.contact_person || '',
       phone: supplier.phone || '',
       email: supplier.email || '',
@@ -127,16 +134,31 @@ export const SupplierManagementView: React.FC = () => {
     }));
   };
 
+  const handleSelectChange = (e: any) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
   // 提交表单
   const handleSubmit = async () => {
     try {
+      // 构造干净的请求负载，避免空字符串类型问题
+      const payload = {
+        name: formData.name.trim(),
+        settlement_type: formData.settlement_type,
+        settlement_day: formData.settlement_type === 'monthly' && formData.settlement_day !== ''
+          ? Number(formData.settlement_day) : undefined,
+        contact_person: formData.contact_person.trim() || undefined,
+        phone: formData.phone.trim() || undefined,
+        email: formData.email.trim() || undefined,
+        address: formData.address.trim() || undefined,
+      };
+
       if (editingSupplier) {
-        // 更新供应商
-        await supplierApi.updateSupplier(editingSupplier.id, formData);
+        await supplierApi.updateSupplier(editingSupplier.id, payload);
         notification.showSuccess('供应商更新成功');
       } else {
-        // 创建供应商
-        await supplierApi.createSupplier(formData);
+        await supplierApi.createSupplier(payload);
         notification.showSuccess('供应商创建成功');
       }
       handleCloseDialog();
@@ -255,6 +277,8 @@ export const SupplierManagementView: React.FC = () => {
             <TableHead>
               <TableRow>
                 <TableCell>供应商名称</TableCell>
+                <TableCell>结算方式</TableCell>
+                <TableCell>月结日</TableCell>
                 <TableCell>联系人</TableCell>
                 <TableCell>电话</TableCell>
                 <TableCell>邮箱</TableCell>
@@ -266,6 +290,10 @@ export const SupplierManagementView: React.FC = () => {
               {suppliers.map((supplier) => (
                 <TableRow key={supplier.id}>
                   <TableCell>{supplier.name}</TableCell>
+                  <TableCell>
+                    <Chip size="small" label={(supplier as any).settlement_type === 'monthly' ? '月结' : (supplier as any).settlement_type === 'immediate' ? '即付' : '灵活'} />
+                  </TableCell>
+                  <TableCell>{(supplier as any).settlement_type === 'monthly' ? ((supplier as any).settlement_day || '-') : '-'}</TableCell>
                   <TableCell>{supplier.contact_person || '-'}</TableCell>
                   <TableCell>{supplier.phone || '-'}</TableCell>
                   <TableCell>{supplier.email || '-'}</TableCell>
@@ -338,6 +366,32 @@ export const SupplierManagementView: React.FC = () => {
                 value={formData.name}
                 onChange={handleInputChange}
                 required
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                select
+                label="结算方式"
+                name="settlement_type"
+                value={formData.settlement_type}
+                onChange={handleSelectChange}
+              >
+                <MenuItem value="immediate">即付</MenuItem>
+                <MenuItem value="monthly">月结</MenuItem>
+                <MenuItem value="flexible">灵活</MenuItem>
+              </TextField>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                type="number"
+                label="月结日 (1-31)"
+                name="settlement_day"
+                value={formData.settlement_day}
+                onChange={handleInputChange}
+                inputProps={{ min: 1, max: 31 }}
+                disabled={formData.settlement_type !== 'monthly'}
               />
             </Grid>
             <Grid item xs={12}>

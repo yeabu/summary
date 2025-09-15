@@ -1,5 +1,10 @@
 {
   "devDependencies": {
     "typescript": "^5.9.2"
+  },
+  "scripts": {
+    "dev": "npm run dev --prefix react-app",
+    "build": "npm run build --prefix react-app",
+    "preview": "npm run preview --prefix react-app"
   }
 }
