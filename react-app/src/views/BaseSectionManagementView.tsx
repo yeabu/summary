@@ -41,6 +41,7 @@ import BaseSectionForm from '@/components/BaseSectionForm';
 import BatchOperations, { BatchAction } from '@/components/BatchOperations';
 import { useNotification } from '@/components/NotificationProvider';
 import { ApiClient } from '@/api/ApiClient';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 const BaseSectionManagementView: React.FC = () => {
   const location = useLocation();
@@ -168,22 +169,23 @@ const BaseSectionManagementView: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!window.confirm('确认删除该分区吗？此操作不可撤销。')) {
-      return;
-    }
-    
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [toDeleteId, setToDeleteId] = useState<number | null>(null);
+  const handleDelete = (id: number) => { setToDeleteId(id); setConfirmOpen(true); };
+  const doDelete = async () => {
+    if (!toDeleteId) return;
     try {
-      // 使用实例方法而不是静态方法
-      await apiClient.sectionDelete(id);
+      await apiClient.sectionDelete(toDeleteId);
       notification.showSuccess('删除成功');
       loadSections();
-      // 清除选中项中被删除的项
-      setSelectedItems(prev => prev.filter(item => item.id !== id));
+      setSelectedItems(prev => prev.filter(item => item.id !== toDeleteId));
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '删除失败';
       setError(errorMessage);
       notification.showError(errorMessage);
+    } finally {
+      setConfirmOpen(false);
+      setToDeleteId(null);
     }
   };
   
@@ -382,7 +384,7 @@ const BaseSectionManagementView: React.FC = () => {
                     </IconButton>
                   </Tooltip>
                   <Tooltip title="删除">
-                    <IconButton size="small" onClick={() => section.id && handleDelete(section.id)}>
+                    <IconButton size="small" color="error" onClick={() => section.id && handleDelete(section.id)}>
                       <DeleteIcon />
                     </IconButton>
                   </Tooltip>
@@ -404,6 +406,15 @@ const BaseSectionManagementView: React.FC = () => {
           defaultBaseId={baseFilter ? parseInt(baseFilter) : undefined}
         />
       </Dialog>
+      <ConfirmDialog
+        open={confirmOpen}
+        onClose={() => { setConfirmOpen(false); setToDeleteId(null); }}
+        onConfirm={doDelete}
+        title="确认删除分区"
+        content="此操作不可撤销，确定要删除该分区吗？"
+        confirmText="删除"
+        confirmColor="error"
+      />
     </Paper>
   );
 };

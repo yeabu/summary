@@ -248,32 +248,34 @@ func DeleteBase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 检查是否有用户关联到此基地
-	var userCount int64
-	if err := db.DB.Model(&models.User{}).Where("base = ?", base.Name).Count(&userCount).Error; err == nil && userCount > 0 {
-		http.Error(w, "该基地下还有用户，无法删除", http.StatusConflict)
-		return
-	}
+    // 检查采购/费用关联（按 base_id）
+    var purchaseCount int64
+    if err := db.DB.Model(&models.PurchaseEntry{}).Where("base_id = ?", base.ID).Count(&purchaseCount).Error; err == nil && purchaseCount > 0 {
+        http.Error(w, "该基地下还有采购记录，无法删除", http.StatusConflict)
+        return
+    }
+    var expenseCount int64
+    if err := db.DB.Model(&models.BaseExpense{}).Where("base_id = ?", base.ID).Count(&expenseCount).Error; err == nil && expenseCount > 0 {
+        http.Error(w, "该基地下还有费用记录，无法删除", http.StatusConflict)
+        return
+    }
 
-	// 检查是否有采购记录关联到此基地
-	var purchaseCount int64
-	if err := db.DB.Model(&models.PurchaseEntry{}).Where("base = ?", base.Name).Count(&purchaseCount).Error; err == nil && purchaseCount > 0 {
-		http.Error(w, "该基地下还有采购记录，无法删除", http.StatusConflict)
-		return
-	}
-
-	// 检查是否有费用记录关联到此基地
-	var expenseCount int64
-	if err := db.DB.Model(&models.BaseExpense{}).Where("base = ?", base.Name).Count(&expenseCount).Error; err == nil && expenseCount > 0 {
-		http.Error(w, "该基地下还有费用记录，无法删除", http.StatusConflict)
-		return
-	}
-
-	// 删除基地
-	if err := db.DB.Delete(&base).Error; err != nil {
-		http.Error(w, "删除基地失败", http.StatusInternalServerError)
-		return
-	}
+    // 事务内清理依赖并删除
+    tx := db.DB.Begin()
+    if tx.Error != nil { http.Error(w, "事务启动失败", http.StatusInternalServerError); return }
+    // 清理 user_bases 里该基地的关联
+    if err := tx.Where("base_id = ?", base.ID).Delete(&models.UserBase{}).Error; err != nil {
+        tx.Rollback(); http.Error(w, "清理基地用户关联失败", http.StatusInternalServerError); return
+    }
+    // 删除基地分区，避免外键阻塞
+    if err := tx.Where("base_id = ?", base.ID).Delete(&models.BaseSection{}).Error; err != nil {
+        tx.Rollback(); http.Error(w, "删除基地分区失败", http.StatusInternalServerError); return
+    }
+    // 删除基地
+    if err := tx.Delete(&models.Base{}, base.ID).Error; err != nil {
+        tx.Rollback(); http.Error(w, "删除基地失败", http.StatusInternalServerError); return
+    }
+    if err := tx.Commit().Error; err != nil { http.Error(w, "提交失败", http.StatusInternalServerError); return }
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -325,41 +327,43 @@ func BatchDeleteBases(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 检查每个基地是否可以删除
-	for _, base := range bases {
-		// 检查用户关联
-		var userCount int64
-		if err := db.DB.Model(&models.User{}).Where("base = ?", base.Name).Count(&userCount).Error; err == nil && userCount > 0 {
-			http.Error(w, "基地「"+base.Name+"」下还有用户，无法删除", http.StatusConflict)
-			return
-		}
+    // 检查每个基地是否可以删除（存在采购/费用则禁止）
+    for _, base := range bases {
+        // 检查采购记录关联
+        var purchaseCount int64
+        if err := db.DB.Model(&models.PurchaseEntry{}).Where("base_id = ?", base.ID).Count(&purchaseCount).Error; err == nil && purchaseCount > 0 {
+            http.Error(w, "基地「"+base.Name+"」下还有采购记录，无法删除", http.StatusConflict)
+            return
+        }
 
-		// 检查采购记录关联
-		var purchaseCount int64
-		if err := db.DB.Model(&models.PurchaseEntry{}).Where("base = ?", base.Name).Count(&purchaseCount).Error; err == nil && purchaseCount > 0 {
-			http.Error(w, "基地「"+base.Name+"」下还有采购记录，无法删除", http.StatusConflict)
-			return
-		}
+        // 检查费用记录关联
+        var expenseCount int64
+        if err := db.DB.Model(&models.BaseExpense{}).Where("base_id = ?", base.ID).Count(&expenseCount).Error; err == nil && expenseCount > 0 {
+            http.Error(w, "基地「"+base.Name+"」下还有费用记录，无法删除", http.StatusConflict)
+            return
+        }
+    }
 
-		// 检查费用记录关联
-		var expenseCount int64
-		if err := db.DB.Model(&models.BaseExpense{}).Where("base = ?", base.Name).Count(&expenseCount).Error; err == nil && expenseCount > 0 {
-			http.Error(w, "基地「"+base.Name+"」下还有费用记录，无法删除", http.StatusConflict)
-			return
-		}
-	}
-
-	// 执行批量删除
-	result := db.DB.Delete(&bases)
-	if result.Error != nil {
-		http.Error(w, "批量删除基地失败: "+result.Error.Error(), http.StatusInternalServerError)
-		return
-	}
+    // 执行批量删除（事务）：清理 user_bases 与 base_sections 后删除 bases
+    tx := db.DB.Begin()
+    if tx.Error != nil { http.Error(w, "事务启动失败", http.StatusInternalServerError); return }
+    ids := make([]uint, 0, len(bases))
+    for _, b := range bases { ids = append(ids, b.ID) }
+    if err := tx.Where("base_id IN ?", ids).Delete(&models.UserBase{}).Error; err != nil {
+        tx.Rollback(); http.Error(w, "清理基地用户关联失败", http.StatusInternalServerError); return
+    }
+    if err := tx.Where("base_id IN ?", ids).Delete(&models.BaseSection{}).Error; err != nil {
+        tx.Rollback(); http.Error(w, "删除基地分区失败", http.StatusInternalServerError); return
+    }
+    if err := tx.Where("id IN ?", ids).Delete(&models.Base{}).Error; err != nil {
+        tx.Rollback(); http.Error(w, "批量删除基地失败: "+err.Error(), http.StatusInternalServerError); return
+    }
+    if err := tx.Commit().Error; err != nil { http.Error(w, "提交失败", http.StatusInternalServerError); return }
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success":       true,
-		"message":       "批量删除基地成功",
-		"deleted_count": result.RowsAffected,
-	})
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "success":       true,
+        "message":       "批量删除基地成功",
+        "deleted_count": len(bases),
+    })
 }

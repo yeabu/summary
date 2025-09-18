@@ -7,6 +7,7 @@ import (
     "encoding/json"
     "fmt"
     "log"
+    "os"
     "net/http"
     "strings"
     "strconv"
@@ -14,10 +15,11 @@ import (
 )
 
 type PurchaseItemReq struct {
-	ProductName string  `json:"product_name"`
-	Quantity    float64 `json:"quantity"`
-	UnitPrice   float64 `json:"unit_price"`
-	Amount      float64 `json:"amount"`
+    ProductName string  `json:"product_name"`
+    Unit        string  `json:"unit"`
+    Quantity    float64 `json:"quantity"`
+    UnitPrice   float64 `json:"unit_price"`
+    Amount      float64 `json:"amount"`
 }
 type PurchaseReq struct {
 	SupplierID   *uint             `json:"supplier_id,omitempty"` // 供应商ID
@@ -200,17 +202,81 @@ func CreatePurchase(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-	// 创建采购明细
-	items := make([]models.PurchaseEntryItem, len(req.Items))
-	for i, item := range req.Items {
-		items[i] = models.PurchaseEntryItem{
-			PurchaseEntryID: p.ID,
-			ProductName:     item.ProductName,
-			Quantity:        item.Quantity,
-			UnitPrice:       item.UnitPrice,
-			Amount:          item.Amount,
-		}
-	}
+    // 在创建明细前，确保所有商品已在商品库存在，并缓存产品以便回填价格
+    // 同时在严格模式下校验商品是否属于所选供应商
+    prodCache := make(map[string]models.Product)
+    strictSupplierProduct := strings.EqualFold(os.Getenv("STRICT_PRODUCT_SUPPLIER"), "1") || strings.EqualFold(os.Getenv("STRICT_PRODUCT_SUPPLIER"), "true")
+    for _, item := range req.Items {
+        var prod models.Product
+        if err := db.DB.Where("name = ?", item.ProductName).First(&prod).Error; err != nil {
+            tx.Rollback()
+            http.Error(w, "商品未存在，请先在商品管理中添加："+item.ProductName, http.StatusBadRequest)
+            return
+        }
+        if strictSupplierProduct {
+            if req.SupplierID == nil || *req.SupplierID == 0 {
+                tx.Rollback()
+                http.Error(w, "严格模式：必须提供有效的supplier_id", http.StatusBadRequest)
+                return
+            }
+            if prod.SupplierID == nil || *prod.SupplierID != *req.SupplierID {
+                tx.Rollback()
+                http.Error(w, fmt.Sprintf("严格模式：商品[%s]未关联到所选供应商（请在商品管理中设置该商品的供应商）", item.ProductName), http.StatusBadRequest)
+                return
+            }
+        }
+        prodCache[strings.TrimSpace(item.ProductName)] = prod
+    }
+
+    // 创建采购明细（含单位与基准折算）
+    items := make([]models.PurchaseEntryItem, len(req.Items))
+    for i, item := range req.Items {
+        // 如果未提供单位，按规格优先选取采购单位；若没有规格则回退到基准单位
+        useUnit := strings.TrimSpace(item.Unit)
+        if useUnit == "" {
+            if prod, ok := prodCache[strings.TrimSpace(item.ProductName)]; ok {
+                // 优先读取显式采购参数
+                var pp models.ProductPurchaseParam
+                if err := db.DB.Where("product_id = ?", prod.ID).First(&pp).Error; err == nil {
+                    useUnit = pp.Unit
+                } else {
+                    useUnit = chooseDefaultPurchaseUnit(prod)
+                }
+            }
+        }
+        // 获取换算系数（若存在）
+        factor := getFactorToBaseByName(item.ProductName, useUnit)
+        // 若有显式采购参数则覆盖系数
+        if prod, ok := prodCache[strings.TrimSpace(item.ProductName)]; ok {
+            var pp models.ProductPurchaseParam
+            if err := db.DB.Where("product_id = ?", prod.ID).First(&pp).Error; err == nil {
+                if pp.FactorToBase > 0 { factor = pp.FactorToBase }
+            }
+        }
+        qBase := item.Quantity * factor
+        // 单价回填：来自商品表（若请求未提供或<=0）
+        unitPrice := item.UnitPrice
+        if prod, ok := prodCache[strings.TrimSpace(item.ProductName)]; ok {
+            var pp models.ProductPurchaseParam
+            if err := db.DB.Where("product_id = ?", prod.ID).First(&pp).Error; err == nil {
+                unitPrice = pp.PurchasePrice
+            } else if unitPrice <= 0 && prod.UnitPrice > 0 {
+                unitPrice = prod.UnitPrice
+            }
+        }
+        // 金额回填
+        amount := item.Amount
+        if amount <= 0 { amount = item.Quantity * unitPrice }
+        items[i] = models.PurchaseEntryItem{
+            PurchaseEntryID: p.ID,
+            ProductName:     item.ProductName,
+            Unit:            useUnit,
+            Quantity:        item.Quantity,
+            UnitPrice:       unitPrice,
+            Amount:          amount,
+            QuantityBase:    qBase,
+        }
+    }
     if err := tx.Create(&items).Error; err != nil {
         tx.Rollback()
         log.Printf("[CreatePurchase] create items error: %v", err)
@@ -384,6 +450,45 @@ func CreatePurchase(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(p)
 }
 
+// 获取某商品某单位到基准单位的换算系数；如果未配置则返回1
+func getFactorToBaseByName(productName string, unit string) float64 {
+    if strings.TrimSpace(unit) == "" { return 1 }
+    var prod models.Product
+    if err := db.DB.Where("name = ?", productName).First(&prod).Error; err != nil {
+        return 1
+    }
+    var spec models.ProductUnitSpec
+    if err := db.DB.Where("product_id = ? AND unit = ?", prod.ID, unit).First(&spec).Error; err != nil {
+        return 1
+    }
+    if spec.FactorToBase > 0 { return spec.FactorToBase }
+    return 1
+}
+
+// 选择默认采购单位：优先kind='purchase'且is_default=true；
+// 其次kind='purchase'任意；再其次is_default=true；否则任意一个；若无规格则返回BaseUnit
+func chooseDefaultPurchaseUnit(prod models.Product) string {
+    var spec models.ProductUnitSpec
+    // 1. purchase + default
+    if err := db.DB.Where("product_id = ? AND kind = ? AND is_default = ?", prod.ID, "purchase", true).First(&spec).Error; err == nil {
+        return spec.Unit
+    }
+    // 2. any purchase
+    if err := db.DB.Where("product_id = ? AND kind = ?", prod.ID, "purchase").Order("is_default desc, unit asc").First(&spec).Error; err == nil {
+        return spec.Unit
+    }
+    // 3. any default
+    if err := db.DB.Where("product_id = ? AND is_default = ?", prod.ID, true).First(&spec).Error; err == nil {
+        return spec.Unit
+    }
+    // 4. any
+    if err := db.DB.Where("product_id = ?", prod.ID).Order("unit asc").First(&spec).Error; err == nil {
+        return spec.Unit
+    }
+    // 5. fallback base unit
+    return prod.BaseUnit
+}
+
 func ListPurchase(w http.ResponseWriter, r *http.Request) {
 	claims, err := middleware.ParseJWT(r)
 	if err != nil {
@@ -521,6 +626,7 @@ func ProductSuggestions(w http.ResponseWriter, r *http.Request) {
     if limit <= 0 || limit > 100 { limit = 15 }
 
     type Row struct {
+        ProductID   *uint   `json:"product_id,omitempty"`
         ProductName string  `json:"product_name"`
         AvgPrice    float64 `json:"avg_price"`
         Times       int64   `json:"times"`
@@ -529,10 +635,11 @@ func ProductSuggestions(w http.ResponseWriter, r *http.Request) {
     var rows []Row
     db.DB.
         Table("purchase_entry_items pei").
-        Select("pei.product_name, AVG(pei.unit_price) as avg_price, COUNT(*) as times, DATE_FORMAT(MAX(pe.purchase_date), '%Y-%m-%d') as last_date").
+        Select("p.id as product_id, pei.product_name, AVG(pei.unit_price) as avg_price, COUNT(*) as times, DATE_FORMAT(MAX(pe.purchase_date), '%Y-%m-%d') as last_date").
         Joins("JOIN purchase_entries pe ON pe.id = pei.purchase_entry_id").
+        Joins("LEFT JOIN products p ON p.name = pei.product_name").
         Where("pe.supplier_id = ?", sid).
-        Group("pei.product_name").
+        Group("p.id, pei.product_name").
         Order("times DESC, MAX(pe.purchase_date) DESC").
         Limit(limit).
         Scan(&rows)
@@ -570,10 +677,51 @@ func DeletePurchase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 先删除相关的采购明细
-	db.DB.Where("purchase_entry_id = ?", purchase.ID).Delete(&models.PurchaseEntryItem{})
-	// 再删除采购记录
-	db.DB.Delete(&purchase)
+    // 事务内处理应付款关系后删除
+    tx := db.DB.Begin()
+    if tx.Error != nil { http.Error(w, "事务启动失败", http.StatusInternalServerError); return }
+
+    // 1) 聚合链接：扣减对应应付款并删除链接
+    var links []models.PayableLink
+    if err := tx.Where("purchase_entry_id = ?", purchase.ID).Find(&links).Error; err != nil {
+        tx.Rollback(); http.Error(w, "查询应付款关联失败", http.StatusInternalServerError); return
+    }
+    for _, lk := range links {
+        var pr models.PayableRecord
+        if err := tx.First(&pr, lk.PayableRecordID).Error; err == nil {
+            pr.TotalAmount -= lk.Amount
+            if pr.TotalAmount < 0 { pr.TotalAmount = 0 }
+            pr.UpdateAmounts()
+            if err := tx.Save(&pr).Error; err != nil { tx.Rollback(); http.Error(w, "更新应付款失败", http.StatusInternalServerError); return }
+        }
+    }
+    if err := tx.Where("purchase_entry_id = ?", purchase.ID).Delete(&models.PayableLink{}).Error; err != nil {
+        tx.Rollback(); http.Error(w, "删除应付款链接失败", http.StatusInternalServerError); return
+    }
+
+    // 2) 立即应付：删除无还款记录的应付款
+    var pr models.PayableRecord
+    if err := tx.Where("purchase_entry_id = ?", purchase.ID).First(&pr).Error; err == nil {
+        var cnt int64
+        if err := tx.Model(&models.PaymentRecord{}).Where("payable_record_id = ?", pr.ID).Count(&cnt).Error; err != nil {
+            tx.Rollback(); http.Error(w, "检查还款记录失败", http.StatusInternalServerError); return
+        }
+        if cnt > 0 {
+            tx.Rollback(); http.Error(w, "存在已还款的应付款记录，禁止删除对应采购，请先撤销还款或手动处理", http.StatusBadRequest); return
+        }
+        if err := tx.Delete(&models.PayableRecord{}, pr.ID).Error; err != nil {
+            tx.Rollback(); http.Error(w, "删除关联应付款失败", http.StatusInternalServerError); return
+        }
+    }
+
+    // 3) 删除采购明细和采购本身
+    if err := tx.Where("purchase_entry_id = ?", purchase.ID).Delete(&models.PurchaseEntryItem{}).Error; err != nil {
+        tx.Rollback(); http.Error(w, "删除采购明细失败", http.StatusInternalServerError); return
+    }
+    if err := tx.Delete(&models.PurchaseEntry{}, purchase.ID).Error; err != nil {
+        tx.Rollback(); http.Error(w, "删除采购失败: "+err.Error(), http.StatusInternalServerError); return
+    }
+    if err := tx.Commit().Error; err != nil { http.Error(w, "提交失败", http.StatusInternalServerError); return }
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -685,14 +833,18 @@ func UpdatePurchase(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		items[i] = models.PurchaseEntryItem{
-			PurchaseEntryID: purchase.ID,
-			ProductName:     item.ProductName,
-			Quantity:        item.Quantity,
-			UnitPrice:       item.UnitPrice,
-			Amount:          item.Amount,
-		}
-	}
+        factor := getFactorToBaseByName(item.ProductName, item.Unit)
+        qBase := item.Quantity * factor
+        items[i] = models.PurchaseEntryItem{
+            PurchaseEntryID: purchase.ID,
+            ProductName:     item.ProductName,
+            Unit:            item.Unit,
+            Quantity:        item.Quantity,
+            UnitPrice:       item.UnitPrice,
+            Amount:          item.Amount,
+            QuantityBase:    qBase,
+        }
+    }
 
 	if len(items) > 0 {
 		if err := tx.Create(&items).Error; err != nil {
@@ -760,24 +912,68 @@ func BatchDeletePurchase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 先删除相关的采购明细
-	var purchaseIDs []uint
-	for _, p := range purchases {
-		purchaseIDs = append(purchaseIDs, p.ID)
-	}
-	db.DB.Where("purchase_entry_id IN ?", purchaseIDs).Delete(&models.PurchaseEntryItem{})
+    // 事务删除，先处理与应付款的关联，避免外键失败
+    tx := db.DB.Begin()
+    if tx.Error != nil { http.Error(w, "事务启动失败", http.StatusInternalServerError); return }
 
-	// 再删除采购记录
-	result := db.DB.Delete(&purchases)
-	if result.Error != nil {
-		http.Error(w, "删除失败: "+result.Error.Error(), http.StatusInternalServerError)
-		return
-	}
+    var purchaseIDs []uint
+    for _, p := range purchases { purchaseIDs = append(purchaseIDs, p.ID) }
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success":       true,
-		"message":       "批量删除成功",
-		"deleted_count": result.RowsAffected,
-	})
+    // 1) 处理聚合链接：PayableLink
+    var links []models.PayableLink
+    if err := tx.Where("purchase_entry_id IN ?", purchaseIDs).Find(&links).Error; err != nil {
+        tx.Rollback(); http.Error(w, "查询关联应付款失败", http.StatusInternalServerError); return
+    }
+    // 按应付款分组扣减金额
+    for _, lk := range links {
+        var pr models.PayableRecord
+        if err := tx.First(&pr, lk.PayableRecordID).Error; err == nil {
+            // 扣减总额，重算剩余与状态
+            pr.TotalAmount -= lk.Amount
+            if pr.TotalAmount < 0 { pr.TotalAmount = 0 }
+            pr.UpdateAmounts()
+            if err := tx.Save(&pr).Error; err != nil { tx.Rollback(); http.Error(w, "更新应付款失败", http.StatusInternalServerError); return }
+        }
+    }
+    // 删除链接
+    if err := tx.Where("purchase_entry_id IN ?", purchaseIDs).Delete(&models.PayableLink{}).Error; err != nil {
+        tx.Rollback(); http.Error(w, "删除应付款链接失败", http.StatusInternalServerError); return
+    }
+
+    // 2) 处理立即应付：PayableRecord.PurchaseEntryID = purchase_id
+    var immediatePRs []models.PayableRecord
+    if err := tx.Where("purchase_entry_id IN ?", purchaseIDs).Find(&immediatePRs).Error; err != nil {
+        tx.Rollback(); http.Error(w, "查询应付款失败", http.StatusInternalServerError); return
+    }
+    for _, pr := range immediatePRs {
+        // 若存在还款记录，则禁止删除对应采购，避免财务不一致
+        var cnt int64
+        if err := tx.Model(&models.PaymentRecord{}).Where("payable_record_id = ?", pr.ID).Count(&cnt).Error; err != nil {
+            tx.Rollback(); http.Error(w, "检查还款记录失败", http.StatusInternalServerError); return
+        }
+        if cnt > 0 {
+            tx.Rollback(); http.Error(w, "存在已还款的应付款记录，禁止删除对应采购，请先撤销还款或手动处理", http.StatusBadRequest); return
+        }
+        // 无还款则可安全删除应付款记录
+        if err := tx.Delete(&models.PayableRecord{}, pr.ID).Error; err != nil {
+            tx.Rollback(); http.Error(w, "删除关联应付款失败", http.StatusInternalServerError); return
+        }
+    }
+
+    // 3) 删除采购明细
+    if err := tx.Where("purchase_entry_id IN ?", purchaseIDs).Delete(&models.PurchaseEntryItem{}).Error; err != nil {
+        tx.Rollback(); http.Error(w, "删除采购明细失败", http.StatusInternalServerError); return
+    }
+    // 4) 删除采购记录本身
+    if err := tx.Where("id IN ?", purchaseIDs).Delete(&models.PurchaseEntry{}).Error; err != nil {
+        tx.Rollback(); http.Error(w, "删除采购记录失败: "+err.Error(), http.StatusInternalServerError); return
+    }
+    if err := tx.Commit().Error; err != nil { http.Error(w, "提交失败", http.StatusInternalServerError); return }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "success":       true,
+        "message":       "批量删除成功",
+        "deleted_count": len(purchaseIDs),
+    })
 }

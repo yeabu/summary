@@ -14,38 +14,45 @@ import {
   Box,
   useTheme,
   Button,
+  Tooltip,
   Menu,
   MenuItem,
-  Divider
+  Divider,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import {
   ArrowBack as ArrowBackIcon,
   Home as HomeIcon,
   Receipt as ExpenseIcon,
   ShoppingCart as PurchaseIcon,
+  Inventory2 as InventoryIcon,
   BarChart as StatsIcon,
+  Insights as InsightsIcon,
   Menu as MenuIcon,
   Business as BaseIcon,
   People as UserIcon,
-  Assignment as PayableIcon,
-  Assessment as PayableStatsIcon,
-  LocalShipping as SupplierIcon
+  AccountBalanceWallet as PayableIcon,
+  Storefront as SupplierIcon,
+  Category as CategoryIcon,
 } from '@mui/icons-material';
 import UserMenu from './UserMenu';
 import useAuthStore from '../auth/AuthStore';
+import { useThemeContext } from '../theme/ThemeProvider';
+import { DarkMode as DarkModeIcon, LightMode as LightModeIcon } from '@mui/icons-material';
 
 const StandardAppBar: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const theme = useTheme();
+  const { toggleDarkMode, darkMode } = useThemeContext();
   const user = useAuthStore((state) => state.user);
   const isAdmin = user?.role === 'admin';
   
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
   const menuOpen = Boolean(menuAnchorEl);
 
-  // Check if the current location is the root URL
-  const isRoot = location.pathname === '/';
+  // Always show back icon; do not switch to home icon on '/'
+  const isRoot = false;
 
   const handleBackClick = () => {
     navigate(-1); // Go back to the previous page
@@ -65,9 +72,10 @@ const StandardAppBar: React.FC = () => {
   };
 
   // Dynamic styles based on theme mode
-  const backgroundColor = theme.palette.mode === 'light' ? 'black' : 'white';
-  const iconColor = theme.palette.mode === 'light' ? 'white' : 'black';
-  const textColor = theme.palette.mode === 'light' ? 'white' : 'black';
+  // Colors: light green with 70% opacity (banana page style)
+  const barBg = alpha(theme.palette.secondary.light || theme.palette.secondary.main, 0.7);
+  const iconColor = theme.palette.text.primary;
+  const textColor = theme.palette.text.primary;
 
   const navigationItems = [
     {
@@ -95,6 +103,12 @@ const StandardAppBar: React.FC = () => {
       available: true
     },
     {
+      label: '商品管理',
+      path: '/product/management',
+      icon: <InventoryIcon />,
+      available: true
+    },
+    {
       label: '采购管理',
       path: '/purchase/list',
       icon: <PurchaseIcon />,
@@ -117,14 +131,33 @@ const StandardAppBar: React.FC = () => {
       path: '/user/management',
       icon: <UserIcon />,
       available: isAdmin
+    },
+    {
+      label: '类别管理',
+      path: '/expense/category-management',
+      icon: <CategoryIcon />,
+      available: isAdmin
     }
   ];
 
   const availableNavItems = navigationItems.filter(item => item.available);
 
+  // Determine a single active path (avoid multiple highlights and '/' always-on)
+  const calcMatchLen = (path: string) => {
+    const cur = location.pathname;
+    if (path === '/') return cur === '/' ? 1 : 0;
+    if (cur === path) return path.length;
+    if (cur.startsWith(path + '/')) return path.length;
+    return 0;
+  };
+  const activePath = availableNavItems
+    .map(i => ({ path: i.path, len: calcMatchLen(i.path) }))
+    .sort((a, b) => b.len - a.len)[0]?.path || '';
+  const isActive = (path: string) => path === activePath;
+
   return (
-    <AppBar position="fixed" elevation={1} sx={{ backgroundColor }}>
-      <Toolbar sx={{ display: 'flex', alignItems: 'center', position: 'relative', px: '20px' }}>
+    <AppBar position="fixed" elevation={0} sx={{ backgroundColor: barBg }}>
+      <Toolbar sx={{ display: 'flex', alignItems: 'center', position: 'relative', px: '16px', minHeight: 52 }}>
         {/* Left side - Back button or Home button */}
         <Box sx={{ display: 'flex', alignItems: 'center', position: 'absolute', left: '20px' }}>
           {!isRoot ? (
@@ -132,7 +165,7 @@ const StandardAppBar: React.FC = () => {
               edge="start"
               aria-label="back"
               onClick={handleBackClick}
-              sx={{ marginRight: 2 }}
+              sx={{ marginRight: 1 }}
             >
               <ArrowBackIcon sx={{ color: iconColor }} />
               <Typography variant="body2" sx={{ ml: 1, color: textColor }}>
@@ -144,7 +177,7 @@ const StandardAppBar: React.FC = () => {
               edge="start"
               aria-label="home"
               onClick={() => navigate('/')}
-              sx={{ marginRight: 2 }}
+              sx={{ marginRight: 1 }}
             >
               <HomeIcon sx={{ color: iconColor }} />
             </IconButton>
@@ -154,7 +187,7 @@ const StandardAppBar: React.FC = () => {
           <Typography 
             variant="h6" 
             component="div" 
-            sx={{ color: textColor, fontWeight: 'bold' }}
+            sx={{ color: textColor, fontWeight: 700, fontSize: 14 }}
           >
             Summary系统
           </Typography>
@@ -163,32 +196,57 @@ const StandardAppBar: React.FC = () => {
         {/* Center - Navigation Menu for larger screens - 真正居中 */}
         <Box sx={{ 
           display: { xs: 'none', md: 'flex' }, 
-          alignItems: 'center', 
-          gap: 1,
+          alignItems: 'center',
+          gap: 0.5,
           position: 'absolute',
           left: '50%',
           transform: 'translateX(-50%)'
         }}>
-          {availableNavItems.map((item) => (
-            <Button
-              key={item.path}
-              onClick={() => navigate(item.path)}
-              startIcon={item.icon}
-              sx={{
-                color: textColor,
-                textTransform: 'none',
-                '&:hover': {
-                  backgroundColor: 'rgba(255, 255, 255, 0.1)'
-                }
-              }}
-            >
-              {item.label}
-            </Button>
-          ))}
+          {availableNavItems.map((item) => {
+            const active = isActive(item.path);
+            return (
+              <Button
+                key={item.path}
+                onClick={() => navigate(item.path)}
+                startIcon={item.icon}
+                aria-current={active ? 'page' : undefined}
+                sx={{
+                  color: textColor,
+                  textTransform: 'none',
+                  fontWeight: active ? 700 : 500,
+                  fontSize: 12,
+                  px: 1.25,
+                  py: 0.25,
+                  borderRadius: 8,
+                  backgroundColor: 'transparent',
+                  borderBottom: active ? '2px solid currentColor' : '2px solid transparent',
+                  transition: 'transform 160ms ease, border-color 160ms ease',
+                  transformOrigin: 'center',
+                  '&:hover': {
+                    backgroundColor: 'transparent',
+                    transform: 'scale(1.12)'
+                  },
+                  '& .MuiButton-startIcon': {
+                    mr: 0.5,
+                    '& .MuiSvgIcon-root': { fontSize: 18 }
+                  }
+                }}
+              >
+                {item.label}
+              </Button>
+            );
+          })}
         </Box>
 
         {/* Right side - Menu for mobile and User Menu */}
         <Box sx={{ display: 'flex', alignItems: 'center', position: 'absolute', right: '20px' }}>
+          {/* Theme toggle */}
+          <Tooltip title={darkMode ? '切换到亮色' : '切换到暗色'}>
+            <IconButton onClick={toggleDarkMode} sx={{ color: iconColor, mr: 0.5 }}>
+              {darkMode ? <LightModeIcon /> : <DarkModeIcon />}
+            </IconButton>
+          </Tooltip>
+
           {/* Mobile Navigation Menu */}
           <Box sx={{ display: { xs: 'block', md: 'none' } }}>
             <IconButton
@@ -210,18 +268,21 @@ const StandardAppBar: React.FC = () => {
                 horizontal: 'right',
               }}
             >
-              {availableNavItems.map((item) => (
-                <MenuItem
-                  key={item.path}
-                  onClick={() => handleNavigate(item.path)}
-                  sx={{ minWidth: 150 }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    {item.icon}
-                    {item.label}
-                  </Box>
-                </MenuItem>
-              ))}
+              {availableNavItems.map((item) => {
+                const active = isActive(item.path);
+                return (
+                  <MenuItem
+                    key={item.path}
+                    onClick={() => handleNavigate(item.path)}
+                    sx={{ minWidth: 180, fontWeight: active ? 700 : 500 }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      {item.icon}
+                      {item.label}
+                    </Box>
+                  </MenuItem>
+                );
+              })}
               <Divider />
               <MenuItem onClick={() => handleNavigate('/profile')}>
                 个人资料

@@ -194,6 +194,7 @@ export const PaymentDialog: React.FC<PaymentDialogProps> = ({
               type="number"
               value={formData.amount}
               onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) || 0 })}
+              onFocus={(e) => (e.target as HTMLInputElement).select()}
               inputProps={{ 
                 min: 0.01, 
                 max: payable.remaining_amount,

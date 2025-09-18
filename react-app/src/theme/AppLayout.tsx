@@ -46,13 +46,13 @@ const AppLayout: React.FC = () => {
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'flex-start',
-          paddingTop: 3,
+          paddingTop: 2,
           paddingX: 2,
-          paddingBottom: 4,
-          mt: { xs: 8, sm: 10 },
+          paddingBottom: 3,
+          mt: { xs: 7, sm: 8 },
         }}
       >
-        <Container maxWidth="md">
+        <Container maxWidth="lg">
           <Outlet />
         </Container>
         {isDevelop && <DevIndicator />}

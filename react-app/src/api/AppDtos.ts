@@ -103,6 +103,7 @@ export interface PurchaseItem {
   id?: number;
   purchase_entry_id?: number;
   product_name: string;
+  unit?: string;
   quantity: number;
   unit_price: number;
   amount: number;

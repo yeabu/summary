@@ -42,6 +42,8 @@ import { useNotification } from '@/components/NotificationProvider';
 import dayjs from 'dayjs';
 import { useLocation } from 'react-router-dom';
 import { ApiClient } from '@/api/ApiClient';
+import { ProductApi } from '@/api/ProductApi';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 const PurchaseListView: React.FC = () => {
   const notification = useNotification();
@@ -51,6 +53,8 @@ const PurchaseListView: React.FC = () => {
   const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>('');
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [toDeleteId, setToDeleteId] = useState<number | null>(null);
   const location = useLocation();
   const initialFromSearch = useMemo<FilterOptions>(() => {
     const params = new URLSearchParams(location.search);
@@ -89,6 +93,22 @@ const PurchaseListView: React.FC = () => {
   
   // 创建 ApiClient 实例
   const apiClient = new ApiClient();
+  const productApi = useMemo(() => new ProductApi(), []);
+  const [hasProducts, setHasProducts] = useState<boolean>(true);
+
+  // 检查是否已有商品数据，若没有则提示并限制新增
+  useEffect(() => {
+    const checkProducts = async () => {
+      try {
+        const res = await productApi.listProducts({ limit: 1 });
+        setHasProducts((res?.total || 0) > 0);
+      } catch {
+        // 保守起见，认为没有
+        setHasProducts(false);
+      }
+    };
+    checkProducts();
+  }, [productApi]);
 
   const loadPurchases = async (currentFilters = filters) => {
     setLoading(true);
@@ -176,6 +196,7 @@ const PurchaseListView: React.FC = () => {
         notes: purchaseData.notes,
         items: purchaseData.items.map(item => ({
           product_name: item.product_name,
+          unit: (item as any).unit || '',
           quantity: item.quantity,
           unit_price: item.unit_price,
           amount: item.amount
@@ -253,17 +274,13 @@ const PurchaseListView: React.FC = () => {
     }
   };
 
+  const askDelete = (id: number) => { setToDeleteId(id); setConfirmOpen(true); };
   const handleDelete = async (id: number) => {
     // 验证ID的有效性
     if (!id || typeof id !== 'number' || id <= 0) {
       notification.showError('无效的记录ID，无法删除');
       return;
     }
-    
-    if (!window.confirm('确认删除该采购记录吗？')) {
-      return;
-    }
-    
     try {
       console.log('删除采购记录ID:', id);
       // 使用实例方法而不是静态方法
@@ -276,6 +293,12 @@ const PurchaseListView: React.FC = () => {
       setError(errorMessage);
       notification.showError(`删除失败: ${errorMessage}`);
     }
+  };
+  const doDelete = async () => {
+    if (!toDeleteId) return;
+    await handleDelete(toDeleteId);
+    setConfirmOpen(false);
+    setToDeleteId(null);
   };
   
   // 批量操作处理
@@ -357,11 +380,17 @@ const PurchaseListView: React.FC = () => {
           variant="contained"
           startIcon={<AddIcon />}
           onClick={handleAddNew}
-          disabled={loading}
+          disabled={loading || !hasProducts}
         >
           新增采购记录
         </Button>
       </Box>
+
+      {!hasProducts && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          当前暂无商品数据，请先到“商品管理”添加或导入商品后再创建采购记录。
+        </Alert>
+      )}
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
@@ -443,7 +472,7 @@ const PurchaseListView: React.FC = () => {
                       </IconButton>
                     </Tooltip>
                     <Tooltip title="删除">
-                      <IconButton size="small" onClick={() => purchase.id && handleDelete(purchase.id)}>
+                      <IconButton size="small" color="error" onClick={() => purchase.id && askDelete(purchase.id)}>
                         <DeleteIcon />
                       </IconButton>
                     </Tooltip>
@@ -464,6 +493,15 @@ const PurchaseListView: React.FC = () => {
           submitting={submitting}
         />
       </Dialog>
+      <ConfirmDialog
+        open={confirmOpen}
+        onClose={() => { setConfirmOpen(false); setToDeleteId(null); }}
+        onConfirm={doDelete}
+        title="确认删除采购记录"
+        content="此操作不可撤销，确定要删除该采购记录吗？"
+        confirmText="删除"
+        confirmColor="error"
+      />
 
       {/* 商品详情对话框 */}
       <Dialog open={itemsDialogOpen} onClose={() => setItemsDialogOpen(false)} maxWidth="md" fullWidth>
@@ -474,6 +512,7 @@ const PurchaseListView: React.FC = () => {
               <TableHead>
                 <TableRow>
                   <TableCell>商品名称</TableCell>
+                  <TableCell>单位</TableCell>
                   <TableCell>数量</TableCell>
                   <TableCell>单价</TableCell>
                   <TableCell>金额</TableCell>
@@ -483,6 +522,7 @@ const PurchaseListView: React.FC = () => {
                 {selectedPurchaseItems.items.map((item, index) => (
                   <TableRow key={index}>
                     <TableCell>{item.product_name}</TableCell>
+                    <TableCell>{(item as any).unit || '-'}</TableCell>
                     <TableCell>{item.quantity}</TableCell>
                     <TableCell>¥{item.unit_price?.toFixed(2) || '0.00'}</TableCell>
                     <TableCell>¥{item.amount?.toFixed(2) || '0.00'}</TableCell>

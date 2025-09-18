@@ -1,0 +1,3 @@
+ALTER TABLE products
+  ADD COLUMN IF NOT EXISTS base_unit VARCHAR(32) NULL AFTER unit;
+

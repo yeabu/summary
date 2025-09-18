@@ -20,10 +20,12 @@ type PurchaseEntry struct {
 }
 
 type PurchaseEntryItem struct {
-	ID              uint    `gorm:"primaryKey" json:"id"`
-	PurchaseEntryID uint    `json:"purchase_entry_id"`
-	ProductName     string  `json:"product_name"`
-	Quantity        float64 `json:"quantity"`
-	UnitPrice       float64 `json:"unit_price"`
-	Amount          float64 `json:"amount"`
+    ID              uint    `gorm:"primaryKey" json:"id"`
+    PurchaseEntryID uint    `json:"purchase_entry_id"`
+    ProductName     string  `json:"product_name"`
+    Unit            string  `json:"unit,omitempty"`
+    Quantity        float64 `json:"quantity"`
+    UnitPrice       float64 `json:"unit_price"`
+    Amount          float64 `json:"amount"`
+    QuantityBase    float64 `json:"quantity_base,omitempty"`
 }

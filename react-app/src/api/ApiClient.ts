@@ -102,6 +102,7 @@ export interface Supplier {
 export interface ExpenseCategory {
   id: number;
   name: string;
+  code?: string;
   status: 'active' | 'inactive';
   created_at: string;
   updated_at: string;
@@ -385,6 +386,13 @@ export class ApiClient {
     return this.apiCall<{ deleted_count: number }>('/api/expense/batch-delete', {
       method: 'POST',
       body: JSON.stringify({ ids })
+    });
+  }
+
+  async batchCreateExpense(payload: { base_id?: number; items: Array<{ date: string; category_id: number; amount: number; detail?: string; base_id?: number }> }): Promise<{ created: ExpenseEntry[]; failed: number; message: string }> {
+    return this.apiCall<{ created: ExpenseEntry[]; failed: number; message: string }>(`/api/expense/batch-create`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
     });
   }
 

@@ -18,6 +18,96 @@ type ExpenseReq struct {
     BaseID     uint    `json:"base_id"` // base_id：管理员可指定任一基地
 }
 
+// 批量新增开支
+type ExpenseBatchResp struct {
+    Created  []models.BaseExpense `json:"created"`
+    Failed   int                 `json:"failed"`
+    Message  string              `json:"message"`
+}
+
+func CreateExpenseBatch(w http.ResponseWriter, r *http.Request) {
+    claims, err := middleware.ParseJWT(r)
+    if err != nil { http.Error(w, "token无效", http.StatusUnauthorized); return }
+    role := claims["role"].(string)
+    if role != "admin" && role != "base_agent" { http.Error(w, "无权创建开支记录", http.StatusForbidden); return }
+
+    // 输入格式：{ "items": [ {...}, {...} ] }
+    var payload struct{ BaseID uint `json:"base_id"`; Items []ExpenseReq `json:"items"` }
+    dec := json.NewDecoder(r.Body)
+    dec.DisallowUnknownFields()
+    if err := dec.Decode(&payload); err != nil {
+        http.Error(w, "参数错误：请以 {\\\"items\\\":[...]} 方式提交", http.StatusBadRequest)
+        return
+    }
+    items := payload.Items
+    if len(items) == 0 {
+        http.Error(w, "items 不能为空", http.StatusBadRequest); return
+    }
+
+    tx := db.DB.Begin()
+    if tx.Error != nil { http.Error(w, "事务启动失败", http.StatusInternalServerError); return }
+    var created []models.BaseExpense
+    failed := 0
+
+    // 解析基地（对 base_agent 固定自身基地；admin 每条可带 base_id，未带则不设置）
+    var agentBaseID uint
+    if role == "base_agent" {
+        baseName := claims["base"].(string)
+        var base models.Base
+        if err := tx.Where("name = ?", baseName).First(&base).Error; err != nil {
+            tx.Rollback(); http.Error(w, "用户基地信息错误", http.StatusBadRequest); return
+        }
+        agentBaseID = base.ID
+    }
+
+    for _, req := range items {
+        // 基本校验
+        if req.Date == "" || req.CategoryID == 0 || req.Amount <= 0 {
+            failed++; continue
+        }
+        // 类别校验
+        var cat models.ExpenseCategory
+        if err := tx.Where("id = ? AND status = 'active'", req.CategoryID).First(&cat).Error; err != nil { failed++; continue }
+        // 基地确定
+        var baseID *uint
+        if role == "base_agent" {
+            if agentBaseID != 0 { bid := agentBaseID; baseID = &bid }
+        } else { // admin
+            if req.BaseID != 0 {
+                var base models.Base
+                if err := tx.First(&base, req.BaseID).Error; err != nil { failed++; continue }
+                bid := base.ID; baseID = &bid
+            } else if payload.BaseID != 0 {
+                var base models.Base
+                if err := tx.First(&base, payload.BaseID).Error; err != nil { failed++; continue }
+                bid := base.ID; baseID = &bid
+            }
+        }
+        // 解析日期
+        t, _ := time.Parse("2006-01-02", req.Date)
+        exp := models.BaseExpense{
+            Date:       t,
+            CategoryID: req.CategoryID,
+            Amount:     req.Amount,
+            Detail:     req.Detail,
+            CreatedBy:  uint(claims["uid"].(float64)),
+            CreatedAt:  time.Now(),
+            UpdatedAt:  time.Now(),
+        }
+        if baseID != nil { exp.BaseID = baseID }
+        if err := tx.Create(&exp).Error; err != nil { failed++; continue }
+        created = append(created, exp)
+    }
+
+    if err := tx.Commit().Error; err != nil { http.Error(w, "提交失败", http.StatusInternalServerError); return }
+    // 预加载后返回
+    for i := range created {
+        db.DB.Preload("Base").Preload("Category").First(&created[i], created[i].ID)
+    }
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(ExpenseBatchResp{ Created: created, Failed: failed, Message: "ok" })
+}
+
 func CreateExpense(w http.ResponseWriter, r *http.Request) {
 	claims, err := middleware.ParseJWT(r)
 	if err != nil {

@@ -693,7 +693,7 @@ export const PayableUnifiedView: React.FC = () => {
             <Box sx={{ pt: 1 }}>
               <Grid container spacing={2}>
                 <Grid item xs={6}>
-                  <Typography variant="body2">
+                  <Typography variant="body2" component="div">
                     <strong>供应商：</strong> {typeof selectedPayable.supplier === 'object' ? (selectedPayable.supplier as any).name : selectedPayable.supplier}
                     {typeof selectedPayable.supplier === 'object' && (
                       <Chip size="small" sx={{ ml: 1 }} label={`结算方式：${settlementLabel((selectedPayable.supplier as any).settlement_type)}`}/>

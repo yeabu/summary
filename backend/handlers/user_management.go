@@ -569,11 +569,22 @@ func DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 删除用户
-	if err := db.DB.Delete(&user).Error; err != nil {
-		http.Error(w, "删除用户失败", http.StatusInternalServerError)
-		return
-	}
+    // 事务内删除用户，先清理 user_bases 关联，避免外键约束失败
+    tx := db.DB.Begin()
+    if tx.Error != nil { http.Error(w, "事务启动失败", http.StatusInternalServerError); return }
+    // 先清空与该用户相关的从表引用
+    // 1) user_bases
+    if err := tx.Where("user_id = ?", user.ID).Delete(&models.UserBase{}).Error; err != nil {
+        tx.Rollback(); http.Error(w, "清理用户基地关联失败", http.StatusInternalServerError); return
+    }
+    // 2) base_sections.leader_id 置空
+    if err := tx.Model(&models.BaseSection{}).Where("leader_id = ?", user.ID).Update("leader_id", nil).Error; err != nil {
+        tx.Rollback(); http.Error(w, "清理用户与分区队长关联失败", http.StatusInternalServerError); return
+    }
+    if err := tx.Delete(&models.User{}, user.ID).Error; err != nil {
+        tx.Rollback(); http.Error(w, "删除用户失败", http.StatusInternalServerError); return
+    }
+    if err := tx.Commit().Error; err != nil { http.Error(w, "提交失败", http.StatusInternalServerError); return }
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -652,19 +663,27 @@ func BatchDeleteUsers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 执行批量删除
-	result := db.DB.Delete(&users)
-	if result.Error != nil {
-		http.Error(w, "批量删除用户失败: "+result.Error.Error(), http.StatusInternalServerError)
-		return
-	}
+    // 执行批量删除：事务内先清理 user_bases 再删 users
+    tx := db.DB.Begin()
+    if tx.Error != nil { http.Error(w, "事务启动失败", http.StatusInternalServerError); return }
+    // 清空从表引用
+    if err := tx.Where("user_id IN ?", req.IDs).Delete(&models.UserBase{}).Error; err != nil {
+        tx.Rollback(); http.Error(w, "清理用户基地关联失败", http.StatusInternalServerError); return
+    }
+    if err := tx.Model(&models.BaseSection{}).Where("leader_id IN ?", req.IDs).Update("leader_id", nil).Error; err != nil {
+        tx.Rollback(); http.Error(w, "清理用户与分区队长关联失败", http.StatusInternalServerError); return
+    }
+    if err := tx.Where("id IN ?", req.IDs).Delete(&models.User{}).Error; err != nil {
+        tx.Rollback(); http.Error(w, "批量删除用户失败: "+err.Error(), http.StatusInternalServerError); return
+    }
+    if err := tx.Commit().Error; err != nil { http.Error(w, "提交失败", http.StatusInternalServerError); return }
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success":       true,
-		"message":       "批量删除用户成功",
-		"deleted_count": result.RowsAffected,
-	})
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "success":       true,
+        "message":       "批量删除用户成功",
+        "deleted_count": len(req.IDs),
+    })
 }
 
 // ResetUserPassword 重置用户密码

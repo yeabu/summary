@@ -39,6 +39,7 @@ import BaseForm from '@/components/BaseForm';
 import BatchOperations, { BatchAction } from '@/components/BatchOperations';
 import { useNotification } from '@/components/NotificationProvider';
 import { ApiClient } from '@/api/ApiClient';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 const BaseManagementView: React.FC = () => {
   const navigate = useNavigate();
@@ -151,22 +152,23 @@ const BaseManagementView: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!window.confirm('确认删除该基地吗？此操作不可撤销。')) {
-      return;
-    }
-    
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [toDeleteId, setToDeleteId] = useState<number | null>(null);
+  const handleDelete = (id: number) => { setToDeleteId(id); setConfirmOpen(true); };
+  const doDelete = async () => {
+    if (!toDeleteId) return;
     try {
-      // 使用实例方法而不是静态方法
-      await apiClient.baseDelete(id);
+      await apiClient.baseDelete(toDeleteId);
       notification.showSuccess('删除成功');
       loadBases();
-      // 清除选中项中被删除的项
-      setSelectedItems(prev => prev.filter(item => item.id !== id));
+      setSelectedItems(prev => prev.filter(item => item.id !== toDeleteId));
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '删除失败';
       setError(errorMessage);
       notification.showError(errorMessage);
+    } finally {
+      setConfirmOpen(false);
+      setToDeleteId(null);
     }
   };
   
@@ -366,7 +368,7 @@ const BaseManagementView: React.FC = () => {
                     </IconButton>
                   </Tooltip>
                   <Tooltip title="删除">
-                    <IconButton size="small" onClick={() => base.id && handleDelete(base.id)}>
+                    <IconButton size="small" color="error" onClick={() => base.id && handleDelete(base.id)}>
                       <DeleteIcon />
                     </IconButton>
                   </Tooltip>
@@ -387,6 +389,17 @@ const BaseManagementView: React.FC = () => {
           submitting={submitting}
         />
       </Dialog>
+
+      {/* 删除确认对话框 */}
+      <ConfirmDialog
+        open={confirmOpen}
+        onClose={() => { setConfirmOpen(false); setToDeleteId(null); }}
+        onConfirm={doDelete}
+        title="确认删除基地"
+        content="此操作不可撤销，确定要删除该基地吗？"
+        confirmText="删除"
+        confirmColor="error"
+      />
     </Paper>
   );
 };

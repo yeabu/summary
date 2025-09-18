@@ -79,8 +79,41 @@ const AppThemeProvider: FunctionComponent<PropsWithChildren> = ({ children }) =>
             fontWeight: 600
           },
         },
-        shape: {
-          borderRadius: 4,
+        shape: { borderRadius: 8 },
+        components: {
+          MuiButton: {
+            defaultProps: { size: 'small' },
+            styleOverrides: {
+              root: { textTransform: 'none', borderRadius: 8, fontWeight: 600 },
+            },
+          },
+          MuiTextField: {
+            defaultProps: { size: 'small' },
+          },
+          MuiTable: {
+            defaultProps: { size: 'small' },
+          },
+          MuiTableCell: {
+            styleOverrides: {
+              head: {
+                fontWeight: 700,
+                backgroundColor: darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'
+              },
+            },
+          },
+          MuiPaper: {
+            styleOverrides: {
+              rounded: { borderRadius: 12 },
+            },
+          },
+          MuiDialog: {
+            styleOverrides: {
+              paper: { borderRadius: 12 },
+            },
+          },
+          MuiChip: {
+            defaultProps: { size: 'small' },
+          },
         },
       }),
     [darkMode]

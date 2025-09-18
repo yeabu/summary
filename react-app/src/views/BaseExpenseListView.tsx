@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { ApiClient } from "@/api/ApiClient";
-import { Paper, Box, Button, Table, TableHead, TableRow, TableCell, TableBody, Dialog, Typography, Alert, Checkbox, IconButton } from "@mui/material";
+import { Paper, Box, Button, Table, TableHead, TableRow, TableCell, TableBody, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Typography, Alert, Checkbox, IconButton, Grid, MenuItem } from "@mui/material";
+import PageHeader from '@/components/PageHeader';
+import EmptyState from '@/components/EmptyState';
 import CloseIcon from '@mui/icons-material/Close';
 import BaseExpenseForm from "@/components/BaseExpenseForm";
+import ExpenseBatchCreateForm from "@/components/ExpenseBatchCreateForm";
 import QueryFilter from "@/components/QueryFilter";
 import PaginationControl from "@/components/PaginationControl";
 import ExportButton from "@/components/ExportButton";
@@ -19,6 +22,7 @@ export default function BaseExpenseListView() {
   const [submitting, setSubmitting] = useState(false);
   const [list, setList] = useState<BaseExpense[]>([]);
   const [edit, setEdit] = useState<BaseExpense | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const [error, setError] = useState<string>('');
   const [filters, setFilters] = useState<FilterOptions>({});
   const [pagination, setPagination] = useState<PaginationResponse>({
@@ -29,6 +33,14 @@ export default function BaseExpenseListView() {
   });
   
   const [selectedItems, setSelectedItems] = useState<BaseExpense[]>([]);
+  // 批量添加状态
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [batchText, setBatchText] = useState('');
+  const [batchRows, setBatchRows] = useState<Array<{ date: string; category_name: string; category_id?: number; amount: string; detail: string }>>([]);
+  const [batchError, setBatchError] = useState<string>('');
+  const [bases, setBases] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [defaultBaseId, setDefaultBaseId] = useState<number | ''>('');
   
   // 创建 ApiClient 实例
   const apiClient = new ApiClient();
@@ -189,36 +201,93 @@ export default function BaseExpenseListView() {
 
   useEffect(() => { load(); }, []);
 
+  // 载入基地与类别，用于批量解析和默认基地选择
+  useEffect(() => {
+    (async () => {
+      try { const b = await apiClient.baseList(); setBases(b || []); } catch {}
+      try { const c = await apiClient.listExpenseCategories('active'); setCategories(c || []); } catch {}
+    })();
+  }, []);
+
   return (
     <Box>
       <Paper sx={{ p: 3 }}>
-        <Typography variant="h5" component="h1" gutterBottom>
-          基地日常开支列表
-        </Typography>
-        
+        <PageHeader title="基地日常开支列表" actions={<>
+          <Button 
+            variant="contained" 
+            onClick={() => setCreateOpen(true)}
+            disabled={loading}
+          >新增开支</Button>
+          <Button 
+            variant="outlined" 
+            onClick={() => setBatchOpen(true)}
+            disabled={loading}
+          >批量添加</Button>
+          <ExportButton data={list} type="expenses" filters={filters} disabled={loading} />
+        </>} />
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>
             {error}
           </Alert>
         )}
         
-        <Box mb={2} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Button 
-            variant="contained" 
-            onClick={() => setEdit({} as BaseExpense)}
-            disabled={loading}
-          >
-            新增开支
-          </Button>
-          
-          <ExportButton
-            data={list}
-            type="expenses"
-            filters={filters}
-            disabled={loading}
-          />
-        </Box>
       </Paper>
+
+      {/* 批量添加对话框 */}
+      <Dialog open={batchOpen} onClose={() => setBatchOpen(false)} fullWidth maxWidth="md">
+        <DialogTitle>批量添加开支</DialogTitle>
+        <DialogContent>
+          <Box sx={{ mb:2 }}>
+            <Typography variant="body2">粘贴格式：日期(YYYY-MM-DD), 类别名称, 金额, 备注</Typography>
+            <Typography variant="caption" color="text.secondary">例：2025-09-16, 办公用品, 188.5, A4纸一箱</Typography>
+          </Box>
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={4}>
+              <TextField select fullWidth label="默认基地(可选, admin)" value={defaultBaseId}
+                onChange={(e)=>setDefaultBaseId(e.target.value === '' ? '' : Number(e.target.value))}>
+                <MenuItem value="">不指定</MenuItem>
+                {bases.map(b => (<MenuItem key={b.id} value={b.id}>{b.name}</MenuItem>))}
+              </TextField>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField fullWidth multiline minRows={8} placeholder="一行一条记录，用逗号/Tab/两个以上空格分隔字段"
+                value={batchText} onChange={(e)=>{ const t=e.target.value; setBatchText(t); const lines=t.split(/\r?\n/).map(l=>l.trim()).filter(Boolean); const rows=lines.map(l=>{ const parts=l.split(/\t|,|\s{2,}/).map(s=>s.trim()); const [date, category_name, amount, ...rest]=parts; const detail=(rest?.join(' ')||''); return { date: date||'', category_name: category_name||'', amount: amount||'', detail };}); setBatchRows(rows); }} />
+            </Grid>
+          </Grid>
+          {batchError && <Alert severity="error" sx={{ mt:2 }}>{batchError}</Alert>}
+          {batchRows.length>0 && (
+            <Box sx={{ mt:2 }}>
+              <Typography variant="subtitle2">预览（前20行）：</Typography>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>日期</TableCell>
+                    <TableCell>类别</TableCell>
+                    <TableCell>金额</TableCell>
+                    <TableCell>备注</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {batchRows.slice(0,20).map((r,i)=> (
+                    <TableRow key={i}>
+                      <TableCell>{r.date}</TableCell>
+                      <TableCell>{r.category_name}</TableCell>
+                      <TableCell>{r.amount}</TableCell>
+                      <TableCell>{r.detail}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={()=>setBatchOpen(false)}>取消</Button>
+          <Button variant="contained" onClick={async ()=>{
+            try{ setSubmitting(true); setBatchError(''); const cmap=new Map<string,number>(); categories.forEach((c:any)=>cmap.set(c.name,c.id)); const items=batchRows.map(r=>({date:r.date, category_id:cmap.get(r.category_name)||0, amount:Number(r.amount||0), detail:r.detail})); const invalid=items.find(it=>!it.date||!it.category_id||!(it.amount>0)); if(invalid){ setBatchError('存在无效行：请确保日期/类别/金额有效'); setSubmitting(false); return; } const payload:any={items}; if(defaultBaseId) payload.base_id=Number(defaultBaseId); const res=await apiClient.batchCreateExpense(payload); setBatchOpen(false); setBatchText(''); setBatchRows([]); setDefaultBaseId(''); notification.showSuccess(`已创建 ${res.created.length} 条，失败 ${res.failed}`); load(); } catch(e:any){ setBatchError(e.message||'提交失败'); } finally { setSubmitting(false);} 
+          }} disabled={submitting || batchRows.length===0}>提交</Button>
+        </DialogActions>
+      </Dialog>
 
       <QueryFilter
         onFilter={handleFilter}
@@ -244,6 +313,8 @@ export default function BaseExpenseListView() {
       <Paper sx={{ p: 3 }}>
         {loading ? (
           <TableSkeleton rows={5} columns={8} />
+        ) : list.length === 0 ? (
+          <EmptyState title="暂无开支记录" description="点击右上角“新增开支”或“批量添加”按钮录入数据" />
         ) : (
           <Table size="small">
             <TableHead>
@@ -290,18 +361,6 @@ export default function BaseExpenseListView() {
                   </TableRow>
                 );
               })}
-              {list.length === 0 && !loading && (
-                <TableRow>
-                  <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
-                    <Typography color="text.secondary" variant="h6">
-                      📋 暂无记录
-                    </Typography>
-                    <Typography color="text.secondary" variant="body2" sx={{ mt: 1 }}>
-                      当前没有开支记录，点击上方"新增开支"按钮创建第一条记录
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              )}
             </TableBody>
           </Table>
         )}
@@ -314,6 +373,15 @@ export default function BaseExpenseListView() {
         />
       </Paper>
         
+      {/* 创建（多条） */}
+      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle>新增开支（多条）</DialogTitle>
+        <DialogContent>
+          <ExpenseBatchCreateForm onClose={() => setCreateOpen(false)} onCreated={load} />
+        </DialogContent>
+      </Dialog>
+
+      {/* 编辑（单条） */}
       <Dialog open={!!edit} onClose={() => setEdit(null)} maxWidth="md" fullWidth>
         <Box p={3} sx={{ position: 'relative' }}>
           <IconButton

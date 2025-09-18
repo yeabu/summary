@@ -29,6 +29,7 @@ import {
   Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import { SupplierApi, Supplier } from '../api/SupplierApi';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import PaginationControl from '../components/PaginationControl';
 import { PageLoading } from '../components/LoadingComponents';
 import { useNotification } from '../components/NotificationProvider';
@@ -168,15 +169,17 @@ export const SupplierManagementView: React.FC = () => {
     }
   };
 
-  // 删除供应商
-  const handleDelete = async (supplier: Supplier) => {
-    if (!window.confirm(`确定要删除供应商 "${supplier.name}" 吗？`)) {
-      return;
-    }
-
+  // 删除供应商（对话框确认）
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [toDelete, setToDelete] = useState<Supplier | null>(null);
+  const askDelete = (supplier: Supplier) => { setToDelete(supplier); setConfirmOpen(true); };
+  const doDelete = async () => {
+    if (!toDelete) return;
     try {
-      await supplierApi.deleteSupplier(supplier.id);
+      await supplierApi.deleteSupplier(toDelete.id);
       notification.showSuccess('供应商删除成功');
+      setConfirmOpen(false);
+      setToDelete(null);
       loadSuppliers();
     } catch (err: any) {
       notification.showError(err.message || '删除失败');
@@ -310,7 +313,7 @@ export const SupplierManagementView: React.FC = () => {
                     <Tooltip title="删除">
                       <IconButton 
                         size="small" 
-                        onClick={() => handleDelete(supplier)}
+                        onClick={() => askDelete(supplier)}
                         color="error"
                       >
                         <DeleteIcon />
@@ -321,7 +324,8 @@ export const SupplierManagementView: React.FC = () => {
               ))}
               {suppliers.length === 0 && !loading && (
                 <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+                  {/* 自适应整表宽度：colSpan 与表头列数一致 */}
+                  <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
                     <Typography color="textSecondary">
                       暂无供应商数据
                     </Typography>
@@ -446,6 +450,17 @@ export const SupplierManagementView: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* 删除确认对话框 */}
+      <ConfirmDialog
+        open={confirmOpen}
+        onClose={() => { setConfirmOpen(false); setToDelete(null); }}
+        onConfirm={doDelete}
+        title="确认删除供应商"
+        content={`将删除供应商「${toDelete?.name || ''}」。此操作不可撤销。`}
+        confirmText="删除"
+        confirmColor="error"
+      />
     </Box>
   );
 };

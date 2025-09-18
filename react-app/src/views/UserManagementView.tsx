@@ -53,6 +53,9 @@ const UserManagementView: React.FC = () => {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>('');
+  // 删除确认对话框
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmUser, setConfirmUser] = useState<User | null>(null);
   
   // 密码重置对话框
   const [resetPasswordDialogOpen, setResetPasswordDialogOpen] = useState(false);
@@ -194,22 +197,34 @@ const UserManagementView: React.FC = () => {
     }
   };
 
+  const friendlyDeleteError = (msg: string) => {
+    if (!msg) return '删除失败';
+    if (msg.includes('费用记录')) return '该用户下还有费用记录，无法删除。请先处理相关开支记录后再试。';
+    if (msg.includes('采购记录')) return '该用户下还有采购记录，无法删除。请先处理相关采购记录后再试。';
+    if (msg.includes('分区队长') || msg.includes('base_sections')) return '该用户担任分区队长关联已处理后再删除。请重试。';
+    return msg;
+  };
+
+  const askDelete = (userId: number) => {
+    const u = users.find(x => x.id === userId) || null;
+    setConfirmUser(u);
+    setConfirmOpen(true);
+    handleCloseMenu();
+  };
+
   const handleDelete = async (id: number) => {
-    if (!window.confirm('确认删除该用户吗？此操作不可撤销。')) {
-      return;
-    }
-    
     try {
-      // 使用实例方法而不是静态方法
       await apiClient.userDelete(id);
       notification.showSuccess('删除成功');
+      setConfirmOpen(false);
+      setConfirmUser(null);
       loadUsers();
-      // 清除选中项中被删除的项
       setSelectedItems(prev => prev.filter(item => item.id !== id));
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : '删除失败';
-      setError(errorMessage);
-      notification.showError(errorMessage);
+      const msg = err instanceof Error ? err.message : '删除失败';
+      const friendly = friendlyDeleteError(msg);
+      setError(friendly);
+      notification.showError(friendly);
     }
   };
 
@@ -460,6 +475,15 @@ const UserManagementView: React.FC = () => {
                       <EditIcon />
                     </IconButton>
                   </Tooltip>
+                  <Tooltip title="删除">
+                    <IconButton 
+                      size="small" 
+                      color="error" 
+                      onClick={() => askDelete(user.id!)}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </Tooltip>
                   <Tooltip title="更多操作">
                     <IconButton 
                       size="small" 
@@ -496,14 +520,24 @@ const UserManagementView: React.FC = () => {
           <ResetPasswordIcon sx={{ mr: 1 }} />
           重置密码
         </MenuItem>
-        <MenuItem 
-          onClick={() => selectedUserId && handleDelete(selectedUserId)}
-          sx={{ color: 'error.main' }}
-        >
-          <DeleteIcon sx={{ mr: 1 }} />
-          删除用户
-        </MenuItem>
+        {/* 删除入口统一为行内红色垃圾桶按钮，这里不再提供 */}
       </Menu>
+
+      {/* 删除确认对话框 */}
+      <Dialog open={confirmOpen} onClose={()=>{ setConfirmOpen(false); setConfirmUser(null); }}>
+        <DialogTitle>确认删除用户</DialogTitle>
+        <DialogContent>
+          <Typography>将删除用户「{confirmUser?.name || '-'}」。此操作不可撤销。</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            提示：若该用户存在开支/采购记录，将无法删除。若担任分区队长，系统会自动解除关联后再删除。
+          </Typography>
+          {error && <Alert severity="error" sx={{ mt: 1 }}>{error}</Alert>}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={()=>{ setConfirmOpen(false); setConfirmUser(null); }}>取消</Button>
+          <Button variant="contained" color="error" onClick={()=> confirmUser?.id && handleDelete(confirmUser.id)}>删除</Button>
+        </DialogActions>
+      </Dialog>
 
       {/* 重置密码对话框 */}
       <Dialog open={resetPasswordDialogOpen} onClose={() => setResetPasswordDialogOpen(false)}>

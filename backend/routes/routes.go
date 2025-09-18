@@ -22,8 +22,29 @@ func SetupRouter() *http.ServeMux {
     mux.HandleFunc("/api/purchase/supplier-suggestions", middleware.AuthMiddleware(handlers.SupplierSuggestions, "admin", "base_agent"))
     mux.HandleFunc("/api/purchase/product-suggestions", middleware.AuthMiddleware(handlers.ProductSuggestions, "admin", "base_agent"))
 
+    // 商品单位规格
+    mux.HandleFunc("/api/product/unit-specs", middleware.AuthMiddleware(handlers.ListProductUnitSpecs, "admin", "base_agent"))
+    mux.HandleFunc("/api/product/unit-specs/upsert", middleware.AuthMiddleware(handlers.UpsertProductUnitSpec, "admin"))
+    mux.HandleFunc("/api/product/unit-specs/delete", middleware.AuthMiddleware(handlers.DeleteProductUnitSpec, "admin"))
+    mux.HandleFunc("/api/product/unit-specs/upsert-by-name", middleware.AuthMiddleware(handlers.UpsertProductUnitSpecByName, "admin"))
+
+    // 商品管理
+    mux.HandleFunc("/api/product/list", middleware.AuthMiddleware(handlers.ListProduct, "admin", "base_agent"))
+    mux.HandleFunc("/api/product/create", middleware.AuthMiddleware(handlers.CreateProduct, "admin"))
+    mux.HandleFunc("/api/product/update", middleware.AuthMiddleware(handlers.UpdateProduct, "admin"))
+    mux.HandleFunc("/api/product/delete", middleware.AuthMiddleware(handlers.DeleteProduct, "admin"))
+    mux.HandleFunc("/api/product/export-csv", middleware.AuthMiddleware(handlers.ExportProductCSV, "admin", "base_agent"))
+    mux.HandleFunc("/api/product/import-template", middleware.AuthMiddleware(handlers.DownloadProductCSVTemplate, "admin", "base_agent"))
+    mux.HandleFunc("/api/product/import-csv", middleware.AuthMiddleware(handlers.ImportProductCSV, "admin"))
+
+    // 商品采购参数
+    mux.HandleFunc("/api/product/purchase-param", middleware.AuthMiddleware(handlers.GetProductPurchaseParam, "admin", "base_agent"))
+    mux.HandleFunc("/api/product/purchase-param/upsert", middleware.AuthMiddleware(handlers.UpsertProductPurchaseParam, "admin", "base_agent"))
+    mux.HandleFunc("/api/product/purchase-param/delete", middleware.AuthMiddleware(handlers.DeleteProductPurchaseParam, "admin"))
+
 	// 费用记录管理
 	mux.HandleFunc("/api/expense/create", middleware.AuthMiddleware(handlers.CreateExpense, "admin", "base_agent"))
+	mux.HandleFunc("/api/expense/batch-create", middleware.AuthMiddleware(handlers.CreateExpenseBatch, "admin", "base_agent"))
 	mux.HandleFunc("/api/expense/list", middleware.AuthMiddleware(handlers.ListExpense, "admin", "base_agent"))
 	mux.HandleFunc("/api/expense/update", middleware.AuthMiddleware(handlers.UpdateExpense, "admin", "base_agent"))
 	mux.HandleFunc("/api/expense/delete", middleware.AuthMiddleware(handlers.DeleteExpense, "admin", "base_agent"))

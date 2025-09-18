@@ -7,6 +7,7 @@ export interface SupplierSuggestion {
 }
 
 export interface ProductSuggestion {
+  product_id?: number;
   product_name: string;
   avg_price: number;
   times: number;
@@ -33,4 +34,3 @@ export class PurchaseSuggestApi {
     return this.apiCall(`/api/purchase/product-suggestions?supplier_id=${supplierId}&limit=${limit}`);
   }
 }
-

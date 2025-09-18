@@ -58,6 +58,8 @@ func main() {
         &models.User{},
         &models.Base{},
         &models.BaseSection{},
+        &models.Product{},
+        &models.ProductUnitSpec{},
         &models.PurchaseEntry{},
         &models.PurchaseEntryItem{},
         &models.BaseExpense{},

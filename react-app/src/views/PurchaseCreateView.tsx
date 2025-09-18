@@ -419,6 +419,7 @@ export const PurchaseCreateView: React.FC = () => {
                         type="number"
                         value={item.quantity}
                         onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
+                        onFocus={(e) => (e.target as HTMLInputElement).select()}
                         size="small"
                       />
                     </TableCell>
@@ -428,6 +429,7 @@ export const PurchaseCreateView: React.FC = () => {
                         type="number"
                         value={item.unit_price}
                         onChange={(e) => handleItemChange(index, 'unit_price', e.target.value)}
+                        onFocus={(e) => (e.target as HTMLInputElement).select()}
                         size="small"
                       />
                     </TableCell>
@@ -447,6 +449,7 @@ export const PurchaseCreateView: React.FC = () => {
                         onClick={() => removeItem(index)}
                         disabled={form.items.length <= 1}
                         size="small"
+                        color="error"
                       >
                         <DeleteIcon />
                       </IconButton>

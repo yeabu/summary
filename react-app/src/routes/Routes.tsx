@@ -16,9 +16,11 @@ import BaseSectionManagementView from '../views/BaseSectionManagementView';
 import UserManagementView from '../views/UserManagementView';
 import PayableUnifiedView from '../views/PayableUnifiedView';
 import SupplierManagementView from '../views/SupplierManagementView';
+import ExpenseCategoryManagementView from '../views/ExpenseCategoryManagementView';
 import SupplierPieStatsView from '../views/SupplierPieStatsView';
 import PayableTimelineView from '../views/PayableTimelineView';
 import { ADMIN_ROLE } from '../utils/roles';
+import ProductManagementView from '../views/ProductManagementView';
 
 /**
  * 项目所有页面路由配置，含权限校验。可根据业务扩展。
@@ -46,6 +48,8 @@ const App = () => {
             <Route path="payable/timeline/:id" element={<PayableTimelineView />} />
             {/* 供应商管理 */}
             <Route path="supplier/management" element={<SupplierManagementView />} />
+            {/* 商品管理 */}
+            <Route path="product/management" element={<ProductManagementView />} />
             {/* ONLY admin 见统计分析和采购管理，采用roles嵌套路由 */}
             <Route element={<ProtectedRoute roles={[ADMIN_ROLE]} />}> 
               <Route path="expense/stats" element={<AnalyticsView />} />
@@ -53,6 +57,7 @@ const App = () => {
               <Route path="base/management" element={<BaseManagementView />} />
               <Route path="base/section-management" element={<BaseSectionManagementView />} />
               <Route path="user/management" element={<UserManagementView />} />
+              <Route path="expense/category-management" element={<ExpenseCategoryManagementView />} />
             </Route>
           </Route>
         </Route>

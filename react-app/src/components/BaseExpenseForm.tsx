@@ -169,6 +169,7 @@ export default function BaseExpenseForm({ initial, onSubmit, submitting, onCance
         type="number"
         value={data.amount}
         onChange={e => setData(v => ({ ...v, amount: Number(e.target.value) }))}
+        onFocus={(e) => (e.target as HTMLInputElement).select()}
         inputProps={{ min: 0, step: 0.01 }}
         required
       />

@@ -1,31 +1,49 @@
-version: '3.9'
+version: "3.9"
+
 services:
-  mysql:
-    image: mysql:8
-    container_name: my-mysql
+  db:
+    image: mysql:8.0
+    container_name: summary-mysql
+    restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: rootpass
-      MYSQL_DATABASE: your_db
-      MYSQL_USER: youruser
-      MYSQL_PASSWORD: yourpass
+      MYSQL_DATABASE: summary
+    command: ["--default-authentication-plugin=mysql_native_password", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    volumes:
+      - db-data:/var/lib/mysql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
     ports:
       - "3306:3306"
-    volumes:
-      - ./mysql-data:/var/lib/mysql
 
   backend:
-    build: ./backend
-    container_name: backend-app
-    env_file: ./backend/.env
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    image: summary-backend:latest
+    container_name: summary-backend
+    restart: unless-stopped
     depends_on:
-      - mysql
-    ports:
-      - "8080:8080"
+      - db
+    environment:
+      # Format: user:pass@tcp(host:port)/dbname?params
+      MYSQL_DSN: app:app123@tcp(db:3306)/summary?charset=utf8mb4&parseTime=true&loc=Local
+      JWT_SECRET: super-secret-change-me
+      PORT: "8080"
+    networks:
+      - default
 
   frontend:
-    build: ./react-app
-    container_name: frontend-app
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    image: summary-frontend:latest
+    container_name: summary-frontend
+    restart: unless-stopped
     depends_on:
       - backend
     ports:
       - "80:80"
+
+volumes:
+  db-data:
+

@@ -24,6 +24,7 @@ import {
 } from '@mui/icons-material';
 import dayjs from 'dayjs';
 import { Purchase, PurchaseItem, Base } from '@/api/AppDtos';
+import { ProductApi } from '@/api/ProductApi';
 import { ApiClient } from '@/api/ApiClient';
 import useAuthStore from '@/auth/AuthStore';
 import { SupplierApi, Supplier } from '@/api/SupplierApi';
@@ -80,9 +81,76 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
   const [supplierOptions, setSupplierOptions] = useState<Supplier[]>([]);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [productOptions, setProductOptions] = useState<ProductSuggestion[]>([]);
+  const [unitOptionsByIndex, setUnitOptionsByIndex] = useState<Record<number, string[]>>({});
   const [supplierDialogOpen, setSupplierDialogOpen] = useState(false);
   const [productDialogOpen, setProductDialogOpen] = useState(false);
+  // 移除“管理规格”功能，不再维护本地规格弹窗状态
   const navigate = useNavigate();
+
+  // 辅助：根据商品名称+供应商，补全单价与单位（在选择或失焦时调用）
+  const fillPriceAndUnits = async (index: number, name: string, productId?: number) => {
+    const supplierId = selectedSupplier?.id;
+    if (!name || !supplierId) return;
+    try {
+      const api = new ProductApi();
+      const res = await api.listProducts({ name, supplier_id: supplierId, limit: 1 });
+      const rec = res.records && res.records.length ? res.records[0] : null;
+      if (rec) {
+        // 先尝试读取显式采购参数（优先于建议价与商品基准单价）
+        try {
+          const pp = await api.getPurchaseParam(productId ?? rec.id);
+          if (pp) {
+            // 使用采购参数优先设置单位与单价
+            setUnitOptionsByIndex(prev => ({ ...prev, [index]: [pp.unit] }));
+            if (!(formData.items[index] as any).unit) {
+              updateItem(index, 'unit' as any, pp.unit);
+            }
+            updateItem(index, 'unit_price', pp.purchase_price);
+          }
+        } catch {}
+        // 拉取规格作为单位选项
+        try {
+          const token = await (await import('@/utils/authToken')).getValidAccessTokenOrRefresh();
+          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+          if (token) headers['Authorization'] = `Bearer ${token}`;
+          const res2 = await fetch(`${import.meta.env.VITE_API_URL}/api/product/unit-specs?product_id=${productId ?? rec.id}`, { headers });
+          if (res2.ok) {
+            const specs = await res2.json() as Array<{ unit: string; kind?: string; is_default?: boolean }>;
+            let units = Array.from(new Set(specs.map(s => s.unit))).filter(Boolean);
+            // 选择默认单位优先级：purchase+default > any purchase > any default > first > base_unit
+            let pick: string | undefined;
+            const by = (pred: (s:any)=>boolean) => specs.find(pred)?.unit;
+            pick = by(s => (s.kind === 'purchase') && !!s.is_default);
+            if (!pick) pick = by(s => s.kind === 'purchase');
+            if (!pick) pick = by(s => !!s.is_default);
+            if (!pick) pick = units[0];
+            if ((!units || units.length === 0) && rec.base_unit) {
+              units = [rec.base_unit];
+              pick = rec.base_unit;
+            }
+            setUnitOptionsByIndex(prev => ({ ...prev, [index]: units }));
+            if (pick && !(formData.items[index] as any).unit) {
+              updateItem(index, 'unit' as any, pick);
+            }
+          }
+        } catch {}
+      }
+    } catch (e) {
+      // 忽略静默失败
+    }
+  };
+
+  // 只有在选了供应商且选了基地后，才允许选择商品
+  const canChooseProduct = !!selectedSupplier?.id && !!getBaseName(formData.base).trim();
+
+  // 当切换供应商或基地时，清空当前明细的商品选择与单位选项，避免脏数据
+  useEffect(() => {
+    setFormData(fd => ({
+      ...fd,
+      items: fd.items.map(it => ({ ...it, product_name: '', unit: '', unit_price: 0, amount: 0 }))
+    }));
+    setUnitOptionsByIndex({});
+  }, [selectedSupplier?.id, (formData.base as any)?.id]);
 
   useEffect(() => {
     const loadSuggestions = async () => {
@@ -128,14 +196,33 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     ensureSelectedSupplier();
   }, [supplierOptions, formData.supplier, selectedSupplier]);
 
-  // 选择供应商后加载该供应商常用商品
+  // 选择供应商后加载该供应商常用商品，并合并商品库中的商品
   useEffect(() => {
     const loadProducts = async () => {
       if (!selectedSupplier?.id) { setProductOptions([]); return; }
       try {
-        const api = new PurchaseSuggestApi();
-        const list = await api.productSuggestions(selectedSupplier.id, 15);
-        setProductOptions(list);
+        const suggestApi = new PurchaseSuggestApi();
+        const productApi = new ProductApi();
+        const [suggestList, productList] = await Promise.all([
+          suggestApi.productSuggestions(selectedSupplier.id, 50).catch(() => [] as ProductSuggestion[]),
+          productApi.listProducts({ supplier_id: selectedSupplier.id, limit: 500 }).catch(() => ({ records: [] as any[], total: 0 })),
+        ]);
+        const safeSuggestList: ProductSuggestion[] = Array.isArray(suggestList) ? suggestList : [];
+        const safeProductRecords: any[] = productList && Array.isArray((productList as any).records) ? (productList as any).records : [];
+        // 将 productList 映射为与建议相同的结构，便于统一使用
+        const mappedFromProducts: ProductSuggestion[] = safeProductRecords.map((p: any) => ({
+          product_id: p.id,
+          product_name: p.name,
+          avg_price: typeof p.unit_price === 'number' ? p.unit_price : 0,
+          times: 0,
+          last_date: '',
+        }));
+        // 合并去重（按名称）
+        const map = new Map<string, ProductSuggestion>();
+        [...safeSuggestList, ...mappedFromProducts].forEach(it => {
+          if (!map.has(it.product_name)) map.set(it.product_name, it);
+        });
+        setProductOptions(Array.from(map.values()));
       } catch (e) {
         console.warn('加载商品建议失败', e);
         setProductOptions([]);
@@ -186,21 +273,17 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 
   // 更新采购项
   const updateItem = (index: number, field: keyof PurchaseItem, value: any) => {
-    const newItems = [...formData.items];
-    newItems[index] = { ...newItems[index], [field]: value };
-    
-    // 自动计算金额
-    if (field === 'quantity' || field === 'unit_price') {
-      newItems[index].amount = newItems[index].quantity * newItems[index].unit_price;
-    }
-    
-    const newFormData = { ...formData, items: newItems };
-    
-    // 重新计算总金额
-    const totalAmount = newItems.reduce((sum, item) => sum + (item.amount || 0), 0);
-    newFormData.total_amount = totalAmount;
-    
-    setFormData(newFormData);
+    setFormData(prev => {
+      const newItems = [...prev.items];
+      const current = { ...newItems[index], [field]: value } as PurchaseItem;
+      // 自动计算金额
+      if (field === 'quantity' || field === 'unit_price') {
+        current.amount = (current.quantity || 0) * (current.unit_price || 0);
+      }
+      newItems[index] = current;
+      const totalAmount = newItems.reduce((sum, it) => sum + (it.amount || 0), 0);
+      return { ...prev, items: newItems, total_amount: totalAmount } as any;
+    });
   };
 
   // 添加新的采购项
@@ -211,6 +294,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
         ...formData.items,
         {
           product_name: '',
+          unit: '',
           quantity: 1,
           unit_price: 0,
           amount: 0
@@ -329,10 +413,14 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     if (!getBaseName(formData.base).trim()) {
       localErrors.base = '所属基地不能为空';
     }
+    const allowedNames = new Set(productOptions.map(p => p.product_name));
     effectiveItems.forEach((item, index) => {
       const name = (item.product_name || '').trim();
       if (!name) {
         localErrors[`item_${index}_product_name`] = '商品名称不能为空';
+      }
+      if (name && !allowedNames.has(name)) {
+        localErrors[`item_${index}_product_name`] = '请从供应商的商品清单下拉选择';
       }
       if (item.quantity <= 0) {
         localErrors[`item_${index}_quantity`] = '数量必须大于0';
@@ -530,6 +618,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
               onClick={addItem}
               variant="outlined"
               size="small"
+              disabled={!canChooseProduct}
             >
               添加商品
             </Button>
@@ -558,43 +647,70 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                 <Grid container spacing={2}>
                   <Grid item xs={12} md={6}>
                     <Autocomplete
-                      freeSolo
+                      freeSolo={false}
                       selectOnFocus
                       clearOnBlur
                       handleHomeEndKeys
                       blurOnSelect
-                      options={productOptions.map(p => p.product_name)}
-                      value={item.product_name || ''}
-                      onChange={(_, val) => {
+                      options={(
+                        () => {
+                          const names = Array.from(new Set(productOptions.map(p => p.product_name)));
+                          if (item.product_name && !names.includes(item.product_name)) names.unshift(item.product_name);
+                          return names;
+                        }
+                      )()}
+                      value={(item.product_name as any) || null}
+                      isOptionEqualToValue={(option, value) => option === value}
+                      disabled={!canChooseProduct}
+                      noOptionsText={!selectedSupplier ? '请先选择供应商' : (!getBaseName(formData.base).trim() ? '请先选择所属基地' : '该供应商未绑定任何商品，请到“商品管理”将商品关联到该供应商后再试。')}
+                      onChange={async (_, val) => {
                         const name = (val as string) || '';
                         updateItem(index, 'product_name', name);
                         const ps = productOptions.find(p => p.product_name === name);
-                        if (ps) {
-                          updateItem(index, 'unit_price', Number(ps.avg_price.toFixed(2)));
-                        }
+                        await fillPriceAndUnits(index, name, ps?.product_id);
                       }}
                       onInputChange={(_, newInput) => {
-                        updateItem(index, 'product_name', (newInput || '').trimStart());
+                        // 禁止自由输入，强制从下拉选择
                       }}
                       renderInput={(params) => (
                         <TextField
                           {...params}
-                          label="商品名称（可直接输入，或选择常用推荐）"
+                          label="商品名称"
                           error={!!errors[`item_${index}_product_name`]}
-                          helperText={errors[`item_${index}_product_name`] || (selectedSupplier ? '选择后自动带出单价/小计；也可手动输入' : '请先选择供应商')}
+                          helperText={
+                            errors[`item_${index}_product_name`] 
+                              || (!selectedSupplier ? '请先选择供应商' 
+                                  : (!getBaseName(formData.base).trim() ? '请先选择所属基地' : '从下拉列表选择供应商的商品，自动带出单位与单价'))
+                          }
                           required
                           // 确保把 id 绑定到真实的 input 上，而不是容器
                           inputProps={{
                             ...params.inputProps,
                             id: `product-name-${index}`,
                           }}
-                          onBlur={(e) => {
-                            const name = (e.target as HTMLInputElement).value?.trim() || '';
-                            if (name && name !== (formData.items[index]?.product_name || '')) {
-                              updateItem(index, 'product_name', name);
-                            }
-                          }}
+                          onBlur={undefined}
                         />
+                      )}
+                    />
+                  </Grid>
+
+                  <Grid item xs={12} md={2}>
+                    <Autocomplete
+                      freeSolo
+                      options={(
+                        () => {
+                          const units = Array.from(new Set(unitOptionsByIndex[index] || []));
+                          const u = (item as any).unit as string | undefined;
+                          if (u && !units.includes(u)) units.unshift(u);
+                          return units;
+                        }
+                      )()}
+                      value={((item as any).unit as any) || null}
+                      isOptionEqualToValue={(option, value) => option === value}
+                      onInputChange={(_, v) => updateItem(index, 'unit' as any, v)}
+                      onChange={(_, v) => updateItem(index, 'unit' as any, (v as string) || '')}
+                      renderInput={(params) => (
+                        <TextField {...params} fullWidth label="单位" placeholder="箱/袋/吨..." id={`unit-${index}`} disabled={!item.product_name} />
                       )}
                     />
                   </Grid>
@@ -606,12 +722,14 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                       label="数量"
                       value={item.quantity}
                       onChange={(e) => updateItem(index, 'quantity', Number(e.target.value))}
+                      onFocus={(e) => (e.target as HTMLInputElement).select()}
                       error={!!errors[`item_${index}_quantity`]}
                       helperText={errors[`item_${index}_quantity`]}
                       inputProps={{ min: 0, step: 1 }}
                       id={`quantity-${index}`}
                       required
-                    />
+                      disabled={!item.product_name}
+                      />
                   </Grid>
 
                   <Grid item xs={12} md={2}>
@@ -622,6 +740,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                         label="单价"
                         value={item.unit_price}
                         onChange={(e) => updateItem(index, 'unit_price', Number(e.target.value))}
+                        onFocus={(e) => (e.target as HTMLInputElement).select()}
                         inputProps={{ min: 0, step: 0.01 }}
                         id={`unit-price-${index}`}
                         required
@@ -641,6 +760,8 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
                       id={`amount-${index}`}
                     />
                   </Grid>
+                  
+                  {/* 管理规格入口已移除 */}
                 </Grid>
               </CardContent>
             </Card>
@@ -672,6 +793,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
           </Box>
         </Grid>
       </Grid>
+      {/* 管理规格弹窗已移除 */}
       {/* 供应商缺失提示 */}
       <Dialog open={supplierDialogOpen} onClose={() => setSupplierDialogOpen(false)}>
         <DialogTitle>请先添加供应商</DialogTitle>
@@ -699,5 +821,3 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 };
 
 export default PurchaseForm;
-
-// 弹窗渲染追加（放在默认导出后面的不会执行，改为在组件内已添加状态与逻辑）
