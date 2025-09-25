@@ -3,10 +3,10 @@ package models
 import "time"
 
 type User struct {
-	ID             uint       `gorm:"primaryKey"`
-	Name           string     `gorm:"unique"`
-	Role           string     // "admin", "base_agent", "captain", "factory_manager"
-	Password       string     // bcrypt hash
+	ID             uint       `gorm:"primaryKey" json:"id"`
+	Name           string     `gorm:"unique" json:"name"`
+	Role           string     `json:"role"`       // "admin", "base_agent", "captain", "factory_manager"
+	Password       string     `json:"-"`         // bcrypt hash，不对外暴露
 	JoinDate       *time.Time `json:"join_date,omitempty"`                          // 入司时间
 	Mobile         string     `json:"mobile,omitempty"`                             // 手机号
 	PassportNumber string     `json:"passport_number,omitempty"`                    // 护照号

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -52,7 +52,7 @@ const BaseSectionForm: React.FC<BaseSectionFormProps> = ({
   const [loadingCaptains, setLoadingCaptains] = useState(false);
   
   // 创建 ApiClient 实例
-  const apiClient = new ApiClient();
+  const apiClient = useMemo(() => new ApiClient(), []);
 
   // 加载基地和队长数据
   useEffect(() => {

@@ -91,15 +91,11 @@ func ListBases(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 只有管理员可以查看基地列表
-	userRole := claims["role"].(string)
-	if userRole != "admin" {
-		http.Error(w, "没有权限查看基地列表", http.StatusForbidden)
-		return
-	}
+    // 管理员：查看全部；基地代理/队长：仅查看自己关联基地
+    userRole := claims["role"].(string)
 
-	var bases []models.Base
-	query := db.DB.Order("created_at desc")
+    var bases []models.Base
+    query := db.DB.Order("created_at desc")
 
 	// 支持状态筛选
 	if status := r.URL.Query().Get("status"); status != "" {
@@ -111,10 +107,31 @@ func ListBases(w http.ResponseWriter, r *http.Request) {
 		query = query.Where("name LIKE ?", "%"+name+"%")
 	}
 
-	if err := query.Find(&bases).Error; err != nil {
-		http.Error(w, "查询基地列表失败", http.StatusInternalServerError)
-		return
-	}
+    if userRole == "base_agent" || userRole == "captain" {
+        // 过滤到当前用户的基地
+        var me models.User
+        if v, ok := claims["uid"]; ok {
+            if f, ok2 := v.(float64); ok2 { db.DB.Preload("Bases").First(&me, uint(f)) }
+        }
+        ids := make([]uint, 0, len(me.Bases))
+        for _, b := range me.Bases { ids = append(ids, b.ID) }
+        if len(ids) > 0 {
+            query = query.Where("id IN ?", ids)
+        } else {
+            // 无基地则返回空
+            w.Header().Set("Content-Type", "application/json")
+            json.NewEncoder(w).Encode([]models.Base{})
+            return
+        }
+    } else if userRole != "admin" {
+        http.Error(w, "没有权限查看基地列表", http.StatusForbidden)
+        return
+    }
+
+    if err := query.Find(&bases).Error; err != nil {
+        http.Error(w, "查询基地列表失败", http.StatusInternalServerError)
+        return
+    }
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(bases)
@@ -129,12 +146,8 @@ func GetBase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 只有管理员可以查看基地详情
-	userRole := claims["role"].(string)
-	if userRole != "admin" {
-		http.Error(w, "没有权限查看基地详情", http.StatusForbidden)
-		return
-	}
+    // 管理员可看所有；基地代理/队长仅可看自己基地
+    userRole := claims["role"].(string)
 
 	baseID, err := strconv.ParseUint(r.URL.Query().Get("id"), 10, 64)
 	if err != nil {
@@ -143,10 +156,24 @@ func GetBase(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var base models.Base
-	if err := db.DB.First(&base, baseID).Error; err != nil {
-		http.Error(w, "基地不存在", http.StatusNotFound)
-		return
-	}
+    if err := db.DB.First(&base, baseID).Error; err != nil {
+        http.Error(w, "基地不存在", http.StatusNotFound)
+        return
+    }
+
+    if userRole == "base_agent" || userRole == "captain" {
+        var me models.User
+        if v, ok := claims["uid"]; ok { if f, ok2 := v.(float64); ok2 { db.DB.Preload("Bases").First(&me, uint(f)) } }
+        allowed := map[uint]bool{}
+        for _, b := range me.Bases { allowed[b.ID] = true }
+        if !allowed[base.ID] {
+            http.Error(w, "没有权限查看基地详情", http.StatusForbidden)
+            return
+        }
+    } else if userRole != "admin" {
+        http.Error(w, "没有权限查看基地详情", http.StatusForbidden)
+        return
+    }
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(base)

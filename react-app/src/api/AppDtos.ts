@@ -51,8 +51,10 @@ export interface BaseExpense {
   category: ExpenseCategory;  // 保持category对象用于显示
   category_id: number;        // 添加category_id字段用于提交
   amount: number;
+  currency?: string;
   base: Base;
   detail?: string;
+  receipt_path?: string;
   created_by?: number;
   creator_name?: string;
   created_at?: string;
@@ -115,6 +117,7 @@ export interface Purchase {
   order_number: string;
   purchase_date: string;
   total_amount: number;
+  currency?: string;
   receiver: string;
   base?: Base;  // 在表单中允许未选择（管理员需选择，提交时校验）
   base_id?: number;  // 添加base_id字段用于提交
@@ -124,6 +127,7 @@ export interface Purchase {
   creator_name?: string;
   created_at?: string;
   updated_at?: string;
+  receipt_path?: string;
 }
 
 export interface PurchaseListResponse {

@@ -16,6 +16,7 @@ export default function ExpenseBatchCreateForm({ onClose, onCreated }: { onClose
   const [bases, setBases] = useState<Base[]>([]);
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [baseId, setBaseId] = useState<number | ''>('');
+  const [currency, setCurrency] = useState<string>('CNY');
   const [items, setItems] = useState<Item[]>([{ category_id: '', amount: '', detail: '' }]);
   const [error, setError] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
@@ -42,7 +43,7 @@ export default function ExpenseBatchCreateForm({ onClose, onCreated }: { onClose
       const invalid = items.find(it => !it.category_id || !it.amount || Number(it.amount) <= 0);
       if (invalid) { setError('请完善每条记录：类别与金额必填且金额>0'); return; }
       setSubmitting(true);
-      const payload: any = { items: items.map(it => ({ date, category_id: Number(it.category_id), amount: Number(it.amount), detail: it.detail || '' })) };
+      const payload: any = { items: items.map(it => ({ date, category_id: Number(it.category_id), amount: Number(it.amount), currency, detail: it.detail || '' })) };
       if (isAdmin && baseId) payload.base_id = Number(baseId);
       await api.batchCreateExpense(payload);
       onCreated();
@@ -59,7 +60,7 @@ export default function ExpenseBatchCreateForm({ onClose, onCreated }: { onClose
         <Grid item xs={12} md={4}>
           <TextField fullWidth label="开支日期" type="date" value={date} onChange={e=>setDate(e.target.value)} InputLabelProps={{ shrink: true }} />
         </Grid>
-        <Grid item xs={12} md={8}>
+        <Grid item xs={12} md={4}>
           {isAdmin ? (
             <TextField select fullWidth label="所属基地" value={baseId} onChange={e=>setBaseId(e.target.value === '' ? '' : Number(e.target.value))}>
               <MenuItem value="">请选择基地</MenuItem>
@@ -68,6 +69,13 @@ export default function ExpenseBatchCreateForm({ onClose, onCreated }: { onClose
           ) : (
             <TextField fullWidth label="所属基地" value={user?.base || ''} disabled />
           )}
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <TextField select fullWidth label="币种" value={currency} onChange={e=>setCurrency(e.target.value)}>
+            <MenuItem value="CNY">CNY 人民币</MenuItem>
+            <MenuItem value="LAK">LAK 老挝基普</MenuItem>
+            <MenuItem value="THB">THB 泰铢</MenuItem>
+          </TextField>
         </Grid>
       </Grid>
 
@@ -106,4 +114,3 @@ export default function ExpenseBatchCreateForm({ onClose, onCreated }: { onClose
     </Box>
   );
 }
-

@@ -48,6 +48,9 @@ func UpsertProductPurchaseParam(w http.ResponseWriter, r *http.Request) {
         cur.Unit = strings.TrimSpace(req.Unit)
         cur.FactorToBase = req.FactorToBase
         cur.PurchasePrice = req.PurchasePrice
+        // 同步币种为商品的币种
+        var prod models.Product
+        if e := db.DB.First(&prod, req.ProductID).Error; e == nil && prod.Currency != "" { cur.Currency = prod.Currency }
         if err := db.DB.Save(&cur).Error; err != nil { http.Error(w, "更新失败", http.StatusInternalServerError); return }
         // 同步到规格表：保证存在 purchase 类型的规格，并设为默认
         var spec models.ProductUnitSpec
@@ -64,7 +67,10 @@ func UpsertProductPurchaseParam(w http.ResponseWriter, r *http.Request) {
         _ = db.DB.Model(&models.ProductUnitSpec{}).Where("product_id = ? AND id <> ?", req.ProductID, spec.ID).Update("is_default", false).Error
         w.Header().Set("Content-Type", "application/json"); json.NewEncoder(w).Encode(cur); return
     }
-    cur = models.ProductPurchaseParam{ ProductID: req.ProductID, Unit: strings.TrimSpace(req.Unit), FactorToBase: req.FactorToBase, PurchasePrice: req.PurchasePrice }
+    // 初次创建时从商品继承币种
+    var prod models.Product
+    _ = db.DB.First(&prod, req.ProductID).Error
+    cur = models.ProductPurchaseParam{ ProductID: req.ProductID, Unit: strings.TrimSpace(req.Unit), FactorToBase: req.FactorToBase, PurchasePrice: req.PurchasePrice, Currency: func() string { if prod.Currency != "" { return prod.Currency }; return "CNY" }() }
     if err := db.DB.Create(&cur).Error; err != nil { http.Error(w, "创建失败", http.StatusInternalServerError); return }
     // 同步到规格表
     var spec models.ProductUnitSpec

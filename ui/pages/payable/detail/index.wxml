@@ -1,0 +1,94 @@
+<view class="card">
+  <view class="row" style="justify-content: space-between;">
+    <view class="col">
+      <text>供应商</text>
+      <text class="muted">{{item.supplierName}}</text>
+    </view>
+    <view class="col" style="align-items:flex-end;">
+      <text>基地</text>
+      <text class="muted">{{item.baseName}}</text>
+    </view>
+  </view>
+  <view class="row" style="justify-content: space-between; margin-top: 8rpx;">
+    <text class="muted">总额：¥{{item.total}}</text>
+    <text class="muted">已付：¥{{item.paid}}</text>
+    <text class="muted">剩余：¥{{item.remaining}}</text>
+  </view>
+  <view class="row" style="justify-content: space-between; margin-top: 8rpx;">
+    <text class="muted">状态：{{item.status}}</text>
+    <text class="muted">到期：{{item.dueDate}}</text>
+  </view>
+</view>
+
+<view class="fab" bindtap="openPay" style="{{fabStyle}}">
+  <view class="fab-inner">
+    <view class="fab-bar"></view>
+    <view class="fab-bar v"></view>
+  </view>
+</view>
+
+<view class="card">
+  <view class="row" style="justify-content: space-between; align-items:center;">
+    <text class="section-title">还款记录</text>
+    <view class="row" style="gap: 12rpx;">
+      <picker mode="selector" range="{{sortKeyOptions}}" value="{{sortKeyIndex}}" bindchange="onSortKey">
+        <view class="picker">{{sortKeyOptions[sortKeyIndex]}}</view>
+      </picker>
+      <picker mode="selector" range="{{sortOrderOptions}}" value="{{sortOrderIndex}}" bindchange="onSortOrder">
+        <view class="picker">{{sortOrderOptions[sortOrderIndex]}}</view>
+      </picker>
+    </view>
+  </view>
+  <block wx:if="{{payments.length>0}}">
+    <block wx:for="{{payments}}" wx:key="id">
+      <view class="row" style="justify-content: space-between;">
+        <text>{{item.payment_date}}</text>
+        <text>¥{{item.payment_amount}}</text>
+      </view>
+      <view class="row" style="justify-content: space-between;">
+        <text class="muted">方式：{{item.payment_method}}</text>
+        <text class="muted">凭证：{{item.reference_number}}</text>
+      </view>
+    </block>
+  </block>
+  <block wx:else>
+    <text class="muted">暂无还款记录</text>
+  </block>
+</view>
+
+<view class="card">
+  <text class="section-title">关联采购</text>
+  <block wx:if="{{links.length>0}}">
+    <block wx:for="{{links}}" wx:key="id">
+      <view class="row" style="justify-content: space-between;">
+        <text>#{{item.purchase_id}} {{item.order_number}}</text>
+        <text>¥{{item.amount}}</text>
+      </view>
+      <view class="row" style="justify-content: space-between;">
+        <text class="muted">日期：{{item.purchase_date}}</text>
+      </view>
+    </block>
+  </block>
+  <block wx:else>
+    <text class="muted">暂无关联采购</text>
+  </block>
+</view>
+
+<view class="sheet" wx:if="{{payOpen}}">
+  <view class="sheet-body">
+    <view class="row" style="justify-content: space-between; align-items:center;">
+      <text style="font-weight:600;">新增还款</text>
+      <button size="mini" bindtap="closePay">关闭</button>
+    </view>
+    <view class="field"><text class="label">金额</text><input class="input" type="number" value="{{payForm.payment_amount}}" bindinput="iPayAmount"/></view>
+    <view class="field"><text class="label">日期</text><picker mode="date" value="{{payForm.payment_date}}" bindchange="onPayDate"><view class="picker">{{payForm.payment_date || '选择日期'}}</view></picker></view>
+    <view class="field"><text class="label">方式</text>
+      <picker mode="selector" range="{{methodRange}}" value="{{methodIndex}}" bindchange="onMethod">
+        <view class="picker">{{methodRange[methodIndex]}}</view>
+      </picker>
+    </view>
+    <view class="field"><text class="label">凭证号</text><input class="input" value="{{payForm.reference_number}}" bindinput="iRef"/></view>
+    <view class="field"><text class="label">备注</text><input class="input" value="{{payForm.notes}}" bindinput="iNotes"/></view>
+    <button class="btn-primary" bindtap="savePayment" loading="{{saving}}">保存</button>
+  </view>
+</view>

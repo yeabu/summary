@@ -8,6 +8,7 @@ export interface Base {
   location?: string;
   description?: string;
   status: string;
+  currency?: string;
   created_by: number;
   created_at: string;
   updated_at: string;
@@ -50,6 +51,7 @@ export interface PurchaseEntry {
   order_number: string;
   purchase_date: string;
   total_amount: number;
+  currency?: string;
   receiver: string;
   base_id: number;
   base?: Base;
@@ -58,6 +60,7 @@ export interface PurchaseEntry {
   created_at: string;
   updated_at: string;
   items: PurchaseEntryItem[];
+  receipt_path?: string;
 }
 
 // 采购明细类型定义
@@ -77,6 +80,7 @@ export interface ExpenseEntry {
   category: string;
   category_id: number;  // 添加category_id字段
   amount: number;
+  currency?: string;
   detail: string;
   base_id: number;
   base?: Base;
@@ -84,6 +88,7 @@ export interface ExpenseEntry {
   creator_name: string;
   created_at: string;
   updated_at: string;
+  receipt_path?: string;
 }
 
 // 供应商类型定义
@@ -96,6 +101,37 @@ export interface Supplier {
   address?: string;
   created_at: string;
   updated_at: string;
+}
+
+// 库存记录
+export interface InventoryRecord {
+  product_name: string;
+  product_spec: string;
+  product_unit: string;
+  unit_price: number;
+  currency?: string;
+  stock_quantity: number;
+  supplier: string;
+}
+
+// 物资申领记录
+export interface MaterialRequisition {
+  id: number;
+  base_id: number;
+  base?: Base;
+  product_id: number;
+  product?: { id: number; name: string; spec: string; base_unit: string };
+  product_name: string;
+  unit_price: number;
+  quantity_base: number;
+  total_amount: number;
+  currency?: string;
+  request_date: string;
+  requested_by: number;
+  requester?: User;
+  created_at: string;
+  updated_at: string;
+  receipt_path?: string;
 }
 
 // 费用类别类型定义
@@ -235,6 +271,71 @@ export class ApiClient {
     });
   }
 
+  // 库存相关API
+  async inventoryList(params?: { q?: string }): Promise<InventoryRecord[]> {
+    const search = new URLSearchParams();
+    if (params?.q) search.set('q', params.q);
+    const qs = search.toString();
+    return this.apiCall<InventoryRecord[]>(`/api/inventory/list${qs ? `?${qs}` : ''}`);
+  }
+
+  async requisitionCreate(data: { base_id: number; product_id: number; quantity: number; unit?: string; unit_price?: number; request_date?: string; }): Promise<MaterialRequisition> {
+    return this.apiCall<MaterialRequisition>(`/api/inventory/requisition/create`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async requisitionUpdate(id: number, data: { base_id: number; product_id: number; quantity: number; unit?: string; unit_price?: number; request_date?: string; }): Promise<MaterialRequisition> {
+    return this.apiCall<MaterialRequisition>(`/api/inventory/requisition/update?id=${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async requisitionDelete(id: number): Promise<void> {
+    await this.apiCall(`/api/inventory/requisition/delete?id=${id}`, { method: 'DELETE' });
+  }
+
+  async requisitionList(params?: { base_id?: number; product_id?: number; q?: string; date_from?: string; date_to?: string; }): Promise<MaterialRequisition[]> {
+    const search = new URLSearchParams();
+    if (params?.base_id) search.set('base_id', String(params.base_id));
+    if (params?.product_id) search.set('product_id', String(params.product_id));
+    if (params?.q) search.set('q', params.q);
+    if (params?.date_from) search.set('date_from', params.date_from);
+    if (params?.date_to) search.set('date_to', params.date_to);
+    const qs = search.toString();
+    return this.apiCall<MaterialRequisition[]>(`/api/inventory/requisition/list${qs ? `?${qs}` : ''}`);
+  }
+
+  // 上传采购票据
+  async uploadPurchaseReceipt(params: { purchase_id?: number; date?: string; file: File }): Promise<{ path: string; purchase?: PurchaseEntry }> {
+    const token = await getValidAccessTokenOrRefresh();
+    const form = new FormData();
+    if (params.purchase_id) form.append('purchase_id', String(params.purchase_id));
+    if (params.date) form.append('date', params.date);
+    form.append('file', params.file);
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${this.apiUrl}/api/purchase/upload-receipt`, { method: 'POST', headers, body: form });
+    if (!res.ok) throw new Error(await res.text() || `HTTP ${res.status}`);
+    return res.json();
+  }
+
+  // 上传申领票据
+  async uploadRequisitionReceipt(params: { requisition_id?: number; date?: string; file: File }): Promise<{ path: string; requisition?: MaterialRequisition }> {
+    const token = await getValidAccessTokenOrRefresh();
+    const form = new FormData();
+    if (params.requisition_id) form.append('requisition_id', String(params.requisition_id));
+    if (params.date) form.append('date', params.date);
+    form.append('file', params.file);
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${this.apiUrl}/api/inventory/requisition/upload-receipt`, { method: 'POST', headers, body: form });
+    if (!res.ok) throw new Error(await res.text() || `HTTP ${res.status}`);
+    return res.json();
+  }
+
   async userDelete(id: number): Promise<void> {
     await this.apiCall(`/api/user/delete?id=${id}`, {
       method: 'DELETE'
@@ -265,6 +366,7 @@ export class ApiClient {
       order_number: data.order_number,
       purchase_date: data.purchase_date,
       total_amount: data.total_amount,
+      currency: data.currency,
       receiver: data.receiver,
       base_id: data.base_id, // 使用base_id而不是base对象
       items: data.items
@@ -316,6 +418,7 @@ export class ApiClient {
       order_number: data.order_number,
       purchase_date: data.purchase_date,
       total_amount: data.total_amount,
+      currency: data.currency,
       receiver: data.receiver,
       base_id: data.base_id, // 使用base_id而不是base对象
       items: data.items
@@ -374,6 +477,26 @@ export class ApiClient {
       method: 'PUT',
       body: JSON.stringify(requestData)
     });
+  }
+
+  // 上传开支票据
+  async uploadExpenseReceipt(params: { expense_id?: number; date?: string; file: File }): Promise<{ path: string; expense?: ExpenseEntry }> {
+    const token = await getValidAccessTokenOrRefresh();
+    const form = new FormData();
+    if (params.expense_id) form.append('expense_id', String(params.expense_id));
+    if (params.date) form.append('date', params.date);
+    form.append('file', params.file);
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${this.apiUrl}/api/expense/upload-receipt`, {
+      method: 'POST',
+      headers, // 不设置 Content-Type，让浏览器自动带上 multipart 边界
+      body: form,
+    });
+    if (!res.ok) {
+      throw new Error(await res.text() || `HTTP ${res.status}`);
+    }
+    return res.json();
   }
 
   async deleteExpense(id: number): Promise<void> {

@@ -1,0 +1,45 @@
+<view class="card" wx:for="{{items}}" wx:key="id">
+  <view class="row" style="justify-content: space-between;">
+    <view class="col">
+      <text>{{item.name}}</text>
+      <text class="muted">{{item.code}}</text>
+    </view>
+    <view class="col" style="align-items:flex-end;">
+      <text class="muted">{{item.status}}</text>
+      <view>
+        <button size="mini" bindtap="onEdit" data-id="{{item.id}}">编辑</button>
+        <button size="mini" type="warn" bindtap="onDelete" data-id="{{item.id}}">删除</button>
+      </view>
+    </view>
+  </view>
+</view>
+
+<view class="fab" bindtap="openCreate" style="{{fabStyle}}">
+  <view class="fab-inner">
+    <view class="fab-bar"></view>
+    <view class="fab-bar v"></view>
+  </view>
+</view>
+
+<view class="sheet" wx:if="{{formOpen}}">
+  <view class="sheet-body">
+    <view class="row" style="justify-content: space-between; align-items:center;">
+      <text style="font-weight:600;">{{form.id ? '编辑基地' : '新增基地'}}</text>
+      <button size="mini" bindtap="closeForm">关闭</button>
+    </view>
+    <view class="cell-group">
+      <view class="cell"><text class="cell-title">名称</text><input class="input" value="{{form.name}}" bindinput="iName"/></view>
+      <view class="cell"><text class="cell-title">代码</text><input class="input" value="{{form.code}}" bindinput="iCode"/></view>
+      <view class="cell"><text class="cell-title">位置</text><input class="input" value="{{form.location}}" bindinput="iLocation"/></view>
+      <view class="cell"><text class="cell-title">描述</text><input class="input" value="{{form.description}}" bindinput="iDesc"/></view>
+      <view class="cell">
+        <text class="cell-title">状态</text>
+        <picker mode="selector" range="{{statusRange}}" value="{{statusIndex}}" bindchange="onStatus">
+          <view class="picker">{{statusRange[statusIndex]}}</view>
+        </picker>
+      </view>
+    </view>
+    <view class="spacer"></view>
+    <button class="btn-primary" bindtap="save" loading="{{saving}}">保存</button>
+  </view>
+</view>

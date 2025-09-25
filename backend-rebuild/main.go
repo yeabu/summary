@@ -52,8 +52,20 @@ func main() {
         &models.PayableRecord{},
         &models.PayableLink{},
         &models.PaymentRecord{},
+        &models.ExchangeRate{},
     ); err != nil {
         log.Fatal("automigrate error:", err)
+    }
+
+    // seed default exchange rates if missing
+    var cnt int64
+    db.DB.Model(&models.ExchangeRate{}).Where("currency = ?", "LAK").Count(&cnt)
+    if cnt == 0 {
+        db.DB.Create(&models.ExchangeRate{Currency: "LAK", RateToCNY: 1.0/3000.0})
+    }
+    db.DB.Model(&models.ExchangeRate{}).Where("currency = ?", "THB").Count(&cnt)
+    if cnt == 0 {
+        db.DB.Create(&models.ExchangeRate{Currency: "THB", RateToCNY: 1.0/4.47})
     }
 
     mux := routes.SetupRouter()

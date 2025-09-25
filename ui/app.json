@@ -1,0 +1,54 @@
+{
+  "entryPagePath": "pages/login/index",
+  "pages": [
+    "pages/login/index",
+    "pages/home/index",
+    "pages/expense/list/index",
+    "pages/purchase/list/index",
+    "pages/stats/index",
+    "pages/mine/index",
+    "pages/payable/list/index",
+    "pages/payable/detail/index",
+    "pages/supplier/list/index",
+    "pages/product/list/index",
+    "pages/base/list/index",
+    "pages/user/list/index",
+    "pages/category/list/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "佳慧记账",
+    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTextStyle": "black",
+    "backgroundTextStyle": "light"
+  },
+  "tabBar": {
+    "position": "bottom",
+    "color": "#7a7e83",
+    "selectedColor": "#B4282D",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/home/index",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/expense/list/index",
+        "text": "开支"
+      },
+      {
+        "pagePath": "pages/purchase/list/index",
+        "text": "采购"
+      },
+      {
+        "pagePath": "pages/stats/index",
+        "text": "统计"
+      },
+      {
+        "pagePath": "pages/mine/index",
+        "text": "我的"
+      }
+    ]
+  },
+  "sitemapLocation": "sitemap.json",
+  "style": "v2"
+}

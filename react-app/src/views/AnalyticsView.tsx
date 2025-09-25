@@ -15,10 +15,14 @@ import {
   Alert,
   TextField,
   Stack,
+  MenuItem,
 } from '@mui/material';
 import { Tooltip as ReTooltip, Legend, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
 import { FileDownload as FileDownloadIcon, Refresh as RefreshIcon, Assessment as AssessmentIcon } from '@mui/icons-material';
 import { getValidAccessTokenOrRefresh } from '../utils/authToken';
+import { ApiClient } from '@/api/ApiClient';
+import { ProductApi } from '@/api/ProductApi';
+import { formatCurrency } from '@/utils/currency';
 import { PayableApi, SupplierPayableStats } from '../api/PayableApi';
 
 interface ExpenseByBase { base: string; total: number }
@@ -39,6 +43,8 @@ const SUPPLIER_COLORS = ['#4caf50','#2196f3','#ff9800','#e91e63','#9c27b0','#00b
 const AnalyticsView: React.FC = () => {
   const navigate = useNavigate();
   const payableApi = useMemo(() => new PayableApi(), []);
+  const apiClient = useMemo(() => new ApiClient(), []);
+  const productApi = useMemo(() => new ProductApi(), []);
 
   // 时间段汇总
   const [rangeStart, setRangeStart] = useState<string>(() => {
@@ -55,6 +61,20 @@ const AnalyticsView: React.FC = () => {
   const [supplierStatsList, setSupplierStatsList] = useState<SupplierPayableStats[]>([]);
   const [supplierStatsLoading, setSupplierStatsLoading] = useState(false);
   const [supplierStatsError, setSupplierStatsError] = useState<string | null>(null);
+
+  // 新增：每基地开支（可筛选类别）
+  const [expCatId, setExpCatId] = useState<number | ''>('');
+  const [expCategories, setExpCategories] = useState<Array<{ id:number; name:string }>>([]);
+  const [expByBase, setExpByBase] = useState<Array<{ base:string; total:number }>>([]);
+  const [expByBaseLoading, setExpByBaseLoading] = useState(false);
+  const [expByBaseError, setExpByBaseError] = useState<string | null>(null);
+
+  // 新增：每基地物资申领（可筛选商品）
+  const [reqProductId, setReqProductId] = useState<number | ''>('');
+  const [products, setProducts] = useState<Array<{ id:number; name:string }>>([]);
+  const [reqByBase, setReqByBase] = useState<Array<{ base:string; total:number }>>([]);
+  const [reqByBaseLoading, setReqByBaseLoading] = useState(false);
+  const [reqByBaseError, setReqByBaseError] = useState<string | null>(null);
 
   // 导航：采购列表（带供应商和时间范围）
   const openPurchaseListBySupplier = (supplierName: string) => {
@@ -110,6 +130,17 @@ const AnalyticsView: React.FC = () => {
   useEffect(() => {
     loadTimeRangeSummary();
     loadSupplierStats();
+    // 预加载类别与商品供筛选
+    (async () => {
+      try {
+        const cats = await apiClient.listExpenseCategories('active');
+        setExpCategories(cats || []);
+      } catch { setExpCategories([]); }
+      try {
+        const res = await productApi.listProducts({ limit: 500 });
+        setProducts((res.records || []).map(p => ({ id: p.id, name: p.name })));
+      } catch { setProducts([]); }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -139,6 +170,58 @@ const AnalyticsView: React.FC = () => {
     exportCsv(`各基地采购_${rangeStart}_至_${rangeEnd}.csv`, headers, rows);
   };
 
+  // 加载：每基地开支（可筛选类别）
+  const loadExpenseByBase = async () => {
+    try {
+      setExpByBaseLoading(true); setExpByBaseError(null);
+      const apiUrl = import.meta.env.VITE_API_URL;
+      const token = await getValidAccessTokenOrRefresh();
+      const p = new URLSearchParams();
+      p.set('start_date', rangeStart); p.set('end_date', rangeEnd);
+      if (expCatId) p.set('category_id', String(expCatId));
+      const url = `${apiUrl}/api/analytics/expense-by-base?${p.toString()}`;
+      const res = await fetch(url, { headers: { 'Authorization': token ? `Bearer ${token}` : '' } });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setExpByBase(Array.isArray(data) ? data : []);
+    } catch (e:any) {
+      setExpByBaseError(e.message || '加载失败'); setExpByBase([]);
+    } finally { setExpByBaseLoading(false); }
+  };
+
+  const exportExpenseByBaseCsv = () => {
+    if (!expByBase.length) return;
+    const headers = ['基地','开支'];
+    const rows = expByBase.map(x => [x.base || '-', x.total]);
+    exportCsv(`各基地开支_${rangeStart}_至_${rangeEnd}${expCatId?`_类别${expCatId}`:''}.csv`, headers, rows);
+  };
+
+  // 加载：每基地物资申领（可筛选商品）
+  const loadRequisitionByBase = async () => {
+    try {
+      setReqByBaseLoading(true); setReqByBaseError(null);
+      const apiUrl = import.meta.env.VITE_API_URL;
+      const token = await getValidAccessTokenOrRefresh();
+      const p = new URLSearchParams();
+      p.set('start_date', rangeStart); p.set('end_date', rangeEnd);
+      if (reqProductId) p.set('product_id', String(reqProductId));
+      const url = `${apiUrl}/api/analytics/requisition-by-base?${p.toString()}`;
+      const res = await fetch(url, { headers: { 'Authorization': token ? `Bearer ${token}` : '' } });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setReqByBase(Array.isArray(data) ? data : []);
+    } catch (e:any) {
+      setReqByBaseError(e.message || '加载失败'); setReqByBase([]);
+    } finally { setReqByBaseLoading(false); }
+  };
+
+  const exportRequisitionByBaseCsv = () => {
+    if (!reqByBase.length) return;
+    const headers = ['基地','申领总额'];
+    const rows = reqByBase.map(x => [x.base || '-', x.total]);
+    exportCsv(`各基地申领_${rangeStart}_至_${rangeEnd}${reqProductId?`_商品${reqProductId}`:''}.csv`, headers, rows);
+  };
+
   return (
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -151,6 +234,11 @@ const AnalyticsView: React.FC = () => {
         </Stack>
       </Box>
 
+      {/* 提示：本页金额统一折算为人民币 */}
+      <Alert severity="info" sx={{ mb: 2 }}>
+        本页所有金额均已折算为人民币（CNY）并保留两位小数
+      </Alert>
+
       {/* 时间段汇总分析 */}
       <Paper sx={{ p: 2, mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mb: 2 }}>
@@ -159,6 +247,7 @@ const AnalyticsView: React.FC = () => {
             <TextField size="small" type="date" label="开始日期" value={rangeStart} onChange={e=>setRangeStart(e.target.value)} InputLabelProps={{ shrink: true }} />
             <TextField size="small" type="date" label="结束日期" value={rangeEnd} onChange={e=>setRangeEnd(e.target.value)} InputLabelProps={{ shrink: true }} />
             <Button variant="outlined" onClick={loadTimeRangeSummary} disabled={rangeLoading}>查询</Button>
+            <Typography variant="caption" color="text.secondary">统计金额以人民币 CNY 折算显示</Typography>
           </Box>
         </Box>
         {rangeError && <Alert severity="error" sx={{ mb: 2 }}>{rangeError}</Alert>}
@@ -181,7 +270,7 @@ const AnalyticsView: React.FC = () => {
                 {(rangeData?.purchase_by_supplier || []).map((row, idx) => (
                   <TableRow key={row.supplier + idx} hover sx={{ cursor: 'pointer' }} onClick={() => openPurchaseListBySupplier(row.supplier)}>
                     <TableCell>{row.supplier || '-'}</TableCell>
-                    <TableCell align="right">{(row.total || 0).toLocaleString('zh-CN',{style:'currency',currency:'CNY'})}</TableCell>
+                    <TableCell align="right">{formatCurrency(row.total || 0, 'CNY')}</TableCell>
                     <TableCell align="right">{row.count || 0}</TableCell>
                   </TableRow>
                 ))}
@@ -195,7 +284,7 @@ const AnalyticsView: React.FC = () => {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" tick={{ fontSize: 12 }} interval={0} height={60} angle={-15} textAnchor="end" />
                   <YAxis tick={{ fontSize: 12 }} />
-                  <ReTooltip formatter={(v:any)=> (v as number).toLocaleString('zh-CN',{style:'currency',currency:'CNY'})} />
+                  <ReTooltip formatter={(v:any)=> formatCurrency(v as number, 'CNY')} />
                   <Bar dataKey="total" fill="#9c27b0" onClick={(data:any)=> data?.activePayload?.[0]?.payload?.name && openPurchaseListBySupplier(data.activePayload[0].payload.name)} />
                 </BarChart>
               </ResponsiveContainer>
@@ -219,7 +308,7 @@ const AnalyticsView: React.FC = () => {
                 {(rangeData?.purchase_by_base || []).map((row, idx) => (
                   <TableRow key={row.base + idx}>
                     <TableCell>{row.base || '-'}</TableCell>
-                    <TableCell align="right">{(row.total || 0).toLocaleString('zh-CN',{style:'currency',currency:'CNY'})}</TableCell>
+                    <TableCell align="right">{formatCurrency(row.total || 0, 'CNY')}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -232,7 +321,7 @@ const AnalyticsView: React.FC = () => {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" tick={{ fontSize: 12 }} interval={0} height={60} angle={-15} textAnchor="end" />
                   <YAxis tick={{ fontSize: 12 }} />
-                  <ReTooltip formatter={(v:any)=> (v as number).toLocaleString('zh-CN',{style:'currency',currency:'CNY'})} />
+                  <ReTooltip formatter={(v:any)=> formatCurrency(v as number, 'CNY')} />
                   <Bar dataKey="total" fill="#2196f3" />
                 </BarChart>
               </ResponsiveContainer>
@@ -321,9 +410,106 @@ const AnalyticsView: React.FC = () => {
           </Grid>
         </Grid>
       </Paper>
+
+      {/* 每基地开支（可按类别筛选） */}
+      <Paper sx={{ p: 2, mb: 3 }}>
+        <Box sx={{ display:'flex', alignItems:'center', justifyContent:'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+          <Typography variant="h6">每基地开支</Typography>
+          <Box sx={{ display:'flex', gap:1, alignItems:'center' }}>
+            <TextField select size="small" label="开支类别" value={expCatId} onChange={e=> setExpCatId(e.target.value ? Number(e.target.value) : '')} sx={{ minWidth: 180 }}>
+              <MenuItem value="">全部</MenuItem>
+              {expCategories.map(c => (<MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>))}
+            </TextField>
+            <Button variant="outlined" onClick={loadExpenseByBase} disabled={expByBaseLoading}>查询</Button>
+            <Button size="small" onClick={exportExpenseByBaseCsv} disabled={!expByBase.length}>导出CSV</Button>
+          </Box>
+        </Box>
+        {expByBaseError && <Alert severity="error" sx={{ mb: 2 }}>{expByBaseError}</Alert>}
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={6}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>基地</TableCell>
+                  <TableCell align="right">开支金额</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {expByBase.map((row, idx) => (
+                  <TableRow key={row.base + idx}>
+                    <TableCell>{row.base || '-'}</TableCell>
+                    <TableCell align="right">{formatCurrency(row.total || 0, 'CNY')}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <Box sx={{ height: 300 }}>
+              <ResponsiveContainer>
+                <BarChart data={expByBase.map(x => ({ name: x.base, total: x.total }))} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" tick={{ fontSize: 12 }} interval={0} height={60} angle={-15} textAnchor="end" />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <ReTooltip formatter={(v:any)=> formatCurrency(v as number, 'CNY')} />
+                  <Bar dataKey="total" fill="#4caf50" />
+                </BarChart>
+              </ResponsiveContainer>
+            </Box>
+          </Grid>
+        </Grid>
+      </Paper>
+
+      {/* 每基地物资申领（可按商品筛选） */}
+      <Paper sx={{ p: 2 }}>
+        <Box sx={{ display:'flex', alignItems:'center', justifyContent:'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+          <Typography variant="h6">每基地物资申领</Typography>
+          <Box sx={{ display:'flex', gap:1, alignItems:'center' }}>
+            <TextField select size="small" label="商品" value={reqProductId} onChange={e=> setReqProductId(e.target.value ? Number(e.target.value) : '')} sx={{ minWidth: 220 }}>
+              <MenuItem value="">全部</MenuItem>
+              {products.map(p => (<MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>))}
+            </TextField>
+            <Button variant="outlined" onClick={loadRequisitionByBase} disabled={reqByBaseLoading}>查询</Button>
+            <Button size="small" onClick={exportRequisitionByBaseCsv} disabled={!reqByBase.length}>导出CSV</Button>
+          </Box>
+        </Box>
+        {reqByBaseError && <Alert severity="error" sx={{ mb: 2 }}>{reqByBaseError}</Alert>}
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={6}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>基地</TableCell>
+                  <TableCell align="right">申领总额</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {reqByBase.map((row, idx) => (
+                  <TableRow key={row.base + idx}>
+                    <TableCell>{row.base || '-'}</TableCell>
+                    <TableCell align="right">{formatCurrency(row.total || 0, 'CNY')}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <Box sx={{ height: 300 }}>
+              <ResponsiveContainer>
+                <BarChart data={reqByBase.map(x => ({ name: x.base, total: x.total }))} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" tick={{ fontSize: 12 }} interval={0} height={60} angle={-15} textAnchor="end" />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <ReTooltip formatter={(v:any)=> formatCurrency(v as number, 'CNY')} />
+                  <Bar dataKey="total" fill="#ff9800" />
+                </BarChart>
+              </ResponsiveContainer>
+            </Box>
+          </Grid>
+        </Grid>
+      </Paper>
     </Box>
   );
 };
 
 export default AnalyticsView;
-

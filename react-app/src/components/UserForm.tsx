@@ -4,7 +4,7 @@
  * 用于新增和编辑用户信息
  * 支持用户名、角色、基地、密码等字段的录入
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -28,6 +28,7 @@ import {
 } from '@mui/icons-material';
 import { User } from '@/api/AppDtos';
 import { ApiClient } from '@/api/ApiClient';
+import useAuthStore from '@/auth/AuthStore';
 
 interface UserFormProps {
   open: boolean;
@@ -59,7 +60,7 @@ const UserForm: React.FC<UserFormProps> = ({
 }) => {
   const [formData, setFormData] = useState<User>({
     name: '',
-    role: 'base_agent' as User['role'],
+    role: 'captain' as User['role'],
     bases: [], // 使用bases数组而不是单个base
     base_ids: [], // 添加base_ids字段
     password: '',
@@ -75,8 +76,15 @@ const UserForm: React.FC<UserFormProps> = ({
   const [availableBases, setAvailableBases] = useState<string[]>([]);
   const [allBases, setAllBases] = useState<Base[]>([]); // 存储所有基地对象
   
-  // 创建 ApiClient 实例
-  const apiClient = new ApiClient();
+  // 创建 ApiClient 实例（保持稳定引用，避免 useEffect 反复触发）
+  const apiClient = useMemo(() => new ApiClient(), []);
+  const authUser = useAuthStore((s) => s.user);
+  const isBaseAgent = authUser?.role === 'base_agent';
+
+  // 可选角色列表：基地代理仅可创建队长
+  const roleOptions = useMemo(() => (
+    isBaseAgent ? ['captain'] : ['admin', 'base_agent', 'captain', 'factory_manager']
+  ), [isBaseAgent]);
 
   // 加载可用基地列表
   useEffect(() => {
@@ -84,8 +92,12 @@ const UserForm: React.FC<UserFormProps> = ({
       try {
         const bases = await apiClient.baseList();
         console.log('Loaded bases:', bases);
-        setAllBases(bases); // 保存所有基地对象
-        const baseNames = bases.map((base: Base) => base.name).filter((name: string) => name);
+        // 若为基地代理，仅允许选择自己负责的基地
+        const filtered = isBaseAgent && authUser?.bases && authUser.bases.length > 0
+          ? bases.filter((b: Base) => b.code && authUser.bases!.includes(b.code))
+          : bases;
+        setAllBases(filtered); // 保存可选基地对象
+        const baseNames = filtered.map((base: Base) => base.name).filter((name: string) => name);
         setAvailableBases(baseNames);
         console.log('Available base names:', baseNames);
       } catch (err) {
@@ -103,18 +115,20 @@ const UserForm: React.FC<UserFormProps> = ({
     if (open) {
       loadBases();
     }
-  }, [open, apiClient]);
+  }, [open, isBaseAgent, authUser]);
 
   useEffect(() => {
     if (initial) {
+      const nextRole = (initial.role && roleOptions.includes(initial.role)) ? initial.role : (roleOptions[0] as User['role']);
       setFormData({
         ...initial,
+        role: nextRole,
         password: '' // 编辑时不显示原密码
       });
     } else {
       setFormData({
         name: '',
-        role: 'base_agent' as User['role'],
+        role: roleOptions[0] as User['role'],
         bases: [], // 使用bases数组而不是单个base
         base_ids: [], // 初始化base_ids字段
         password: '',
@@ -127,7 +141,7 @@ const UserForm: React.FC<UserFormProps> = ({
     setErrors({});
     setSubmitError('');
     setShowPassword(false);
-  }, [initial, open]);
+  }, [initial, open, roleOptions]);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -274,15 +288,21 @@ const UserForm: React.FC<UserFormProps> = ({
               <FormControl fullWidth required error={!!errors.role}>
                 <InputLabel>用户角色</InputLabel>
                 <Select
-                  value={formData.role || ''}
+                  value={(roleOptions.includes(formData.role || '') ? formData.role : (roleOptions[0] as User['role'])) || ''}
                   label="用户角色"
                   onChange={(e) => handleRoleChange(e.target.value)}
                   disabled={submitting}
                 >
-                  <MenuItem value="admin">管理员</MenuItem>
-                  <MenuItem value="base_agent">基地代理</MenuItem>
-                  <MenuItem value="captain">队长</MenuItem>
-                  <MenuItem value="factory_manager">厂长</MenuItem>
+                  {isBaseAgent ? (
+                    <MenuItem value="captain">队长</MenuItem>
+                  ) : (
+                    <>
+                      <MenuItem value="admin">管理员</MenuItem>
+                      <MenuItem value="base_agent">基地代理</MenuItem>
+                      <MenuItem value="captain">队长</MenuItem>
+                      <MenuItem value="factory_manager">厂长</MenuItem>
+                    </>
+                  )}
                 </Select>
                 {errors.role && (
                   <Box sx={{ color: 'error.main', fontSize: '0.75rem', mt: 0.5, ml: 1.75 }}>

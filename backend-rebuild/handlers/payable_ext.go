@@ -113,9 +113,13 @@ func PaymentCreate(w http.ResponseWriter, r *http.Request) {
     tx := db.DB.Begin()
     if tx.Error != nil { http.Error(w, "tx error", http.StatusInternalServerError); return }
 
+    // Fetch payable to inherit currency for payment record
+    var parent models.PayableRecord
+    _ = tx.First(&parent, req.PayableID).Error
     pay := models.PaymentRecord{
         PayableRecordID: req.PayableID,
         PaymentAmount: req.Amount,
+        Currency: func() string { if parent.Currency != "" { return parent.Currency }; return "CNY" }(),
         PaymentDate: t,
         PaymentMethod: req.PaymentMethod,
         ReferenceNumber: req.Reference,

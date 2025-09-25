@@ -22,6 +22,17 @@ type AnalyticsSummaryResponse struct {
     PurchaseByBase []PurchaseByBaseRow `json:"purchase_by_base"`
 }
 
+// getRatesMap returns currency->rate_to_cny with default CNY=1
+func getRatesMap() map[string]float64 {
+    rates := map[string]float64{"CNY": 1}
+    var rows []struct{ Currency string; RateToCNY float64 }
+    db.DB.Table("exchange_rates").Select("currency, rate_to_cny").Scan(&rows)
+    for _, r := range rows {
+        if r.Currency != "" { rates[r.Currency] = r.RateToCNY }
+    }
+    return rates
+}
+
 // AnalyticsSummary computes time-range analytics for expense and purchase
 func AnalyticsSummary(w http.ResponseWriter, r *http.Request) {
     start := r.URL.Query().Get("start_date")
@@ -62,87 +73,100 @@ func AnalyticsSummary(w http.ResponseWriter, r *http.Request) {
             _ = json.NewEncoder(w).Encode(resp)
             return
         }
+        rates := getRatesMap()
         // Expenses by base from mv_base_expense_month
-        type eRow struct{ BaseID uint; Name string; Total float64 }
+        type eRow struct{ BaseID uint; Name string; Curr string; Total float64 }
         var eRows []eRow
         qeb := db.DB.Table("mv_base_expense_month m").
-            Select("m.base_id as base_id, b.name as name, COALESCE(SUM(m.total_amount),0) as total").
+            Select("m.base_id as base_id, b.name as name, COALESCE(b.currency,'CNY') as curr, COALESCE(SUM(m.total_amount),0) as total").
             Joins("JOIN bases b ON b.id = m.base_id").
             Where("m.month IN ?", months)
         if len(ids) > 0 { qeb = qeb.Where("m.base_id IN ?", ids) }
         qeb.Group("m.base_id, b.name").Scan(&eRows)
         var totalExp float64
-        for _, x := range eRows { totalExp += x.Total; resp.ExpenseByBase = append(resp.ExpenseByBase, ExpenseByBaseRow{Base: x.Name, Total: x.Total}) }
+        for _, x := range eRows { rate := rates[x.Curr]; if rate == 0 { rate = 1 }; v := x.Total * rate; totalExp += v; resp.ExpenseByBase = append(resp.ExpenseByBase, ExpenseByBaseRow{Base: x.Name, Total: v}) }
         resp.TotalExpense = totalExp
 
         // Purchases from mv_supplier_monthly_spend
-        type sRow struct{ SupplierID *uint; Name string; Total float64; Cnt uint64 }
+        type sRow struct{ SupplierID *uint; Name string; Curr string; Total float64; Cnt uint64 }
         var sRows []sRow
         qps := db.DB.Table("mv_supplier_monthly_spend m").
-            Select("COALESCE(s.id, NULL) as supplier_id, COALESCE(s.name, '-') as name, COALESCE(SUM(m.total_purchase),0) as total, COALESCE(SUM(m.purchase_count),0) as cnt").
+            Select("COALESCE(s.id, NULL) as supplier_id, COALESCE(s.name, '-') as name, COALESCE(b.currency,'CNY') as curr, COALESCE(SUM(m.total_purchase),0) as total, COALESCE(SUM(m.purchase_count),0) as cnt").
             Joins("LEFT JOIN suppliers s ON s.id = m.supplier_id").
+            Joins("JOIN bases b ON b.id = m.base_id").
             Where("m.month IN ?", months)
         if len(ids) > 0 { qps = qps.Where("m.base_id IN ?", ids) }
         qps.Group("s.id, s.name").Order("total DESC").Scan(&sRows)
         var totalPur float64
-        for _, x := range sRows { totalPur += x.Total; resp.PurchaseBySupplier = append(resp.PurchaseBySupplier, PurchaseBySupplierRow{Supplier: x.Name, Total: x.Total, Count: int64(x.Cnt)}) }
+        for _, x := range sRows { rate := rates[x.Curr]; if rate == 0 { rate = 1 }; v := x.Total * rate; totalPur += v; resp.PurchaseBySupplier = append(resp.PurchaseBySupplier, PurchaseBySupplierRow{Supplier: x.Name, Total: v, Count: int64(x.Cnt)}) }
         resp.TotalPurchase = totalPur
 
         // Purchases by base
-        type bRow struct{ BaseID uint; Name string; Total float64 }
+        type bRow struct{ BaseID uint; Name string; Curr string; Total float64 }
         var bRows []bRow
         qpb := db.DB.Table("mv_supplier_monthly_spend m").
-            Select("m.base_id as base_id, b.name as name, COALESCE(SUM(m.total_purchase),0) as total").
+            Select("m.base_id as base_id, b.name as name, COALESCE(b.currency,'CNY') as curr, COALESCE(SUM(m.total_purchase),0) as total").
             Joins("JOIN bases b ON b.id = m.base_id").
             Where("m.month IN ?", months)
         if len(ids) > 0 { qpb = qpb.Where("m.base_id IN ?", ids) }
         qpb.Group("m.base_id, b.name").Order("total DESC").Scan(&bRows)
-        for _, x := range bRows { resp.PurchaseByBase = append(resp.PurchaseByBase, PurchaseByBaseRow{Base: x.Name, Total: x.Total}) }
+        for _, x := range bRows { rate := rates[x.Curr]; if rate == 0 { rate = 1 }; resp.PurchaseByBase = append(resp.PurchaseByBase, PurchaseByBaseRow{Base: x.Name, Total: x.Total * rate}) }
 
         w.Header().Set("Content-Type", "application/json")
         _ = json.NewEncoder(w).Encode(resp)
         return
     }
 
-    // Expenses
-    qexp := db.DB.Table("base_expenses")
-    if len(ids) > 0 { qexp = qexp.Where("base_id IN ?", ids) }
-    qexp.Where("date >= ? AND date < ?", start, end+" 23:59:59").
-        Select("COALESCE(SUM(amount),0)").Scan(&resp.TotalExpense)
-    var erows []struct{ Name string; Total float64 }
+    // Expenses (convert to CNY by base currency)
+    rates := getRatesMap()
+    var expByCurr []struct{ Curr string; Total float64 }
+    qexp2 := db.DB.Table("base_expenses be").
+        Select("COALESCE(b.currency,'CNY') as curr, COALESCE(SUM(be.amount),0) as total").
+        Joins("LEFT JOIN bases b ON b.id = be.base_id").
+        Where("be.date >= ? AND be.date < ?", start, end+" 23:59:59")
+    if len(ids) > 0 { qexp2 = qexp2.Where("be.base_id IN ?", ids) }
+    qexp2.Group("curr").Scan(&expByCurr)
+    for _, r0 := range expByCurr { rate := rates[r0.Curr]; if rate == 0 { rate = 1 }; resp.TotalExpense += r0.Total * rate }
+
+    var erows []struct{ Name string; Curr string; Total float64 }
     qeb := db.DB.Table("base_expenses be").
-        Select("b.name as name, COALESCE(SUM(be.amount),0) as total").
+        Select("b.name as name, COALESCE(b.currency,'CNY') as curr, COALESCE(SUM(be.amount),0) as total").
         Joins("LEFT JOIN bases b ON be.base_id = b.id").
         Where("be.date >= ? AND be.date < ?", start, end+" 23:59:59")
     if len(ids) > 0 { qeb = qeb.Where("be.base_id IN ?", ids) }
-    qeb.Group("b.name").Order("total DESC").Scan(&erows)
-    for _, x := range erows { resp.ExpenseByBase = append(resp.ExpenseByBase, ExpenseByBaseRow{Base: x.Name, Total: x.Total}) }
+    qeb.Group("b.name, curr").Order("total DESC").Scan(&erows)
+    for _, x := range erows { rate := rates[x.Curr]; if rate == 0 { rate = 1 }; resp.ExpenseByBase = append(resp.ExpenseByBase, ExpenseByBaseRow{Base: x.Name, Total: x.Total * rate}) }
 
-    // Purchases total
-    qpt := db.DB.Table("purchase_entries")
-    if len(ids) > 0 { qpt = qpt.Where("base_id IN ?", ids) }
-    qpt.Where("purchase_date >= ? AND purchase_date < ?", start, end+" 23:59:59").
-        Select("COALESCE(SUM(total_amount),0)").Scan(&resp.TotalPurchase)
+    // Purchases total (convert via base currency)
+    var pByCurr []struct{ Curr string; Total float64 }
+    qpt := db.DB.Table("purchase_entries pe").
+        Select("COALESCE(b.currency,'CNY') as curr, COALESCE(SUM(pe.total_amount),0) as total").
+        Joins("LEFT JOIN bases b ON b.id = pe.base_id").
+        Where("pe.purchase_date >= ? AND pe.purchase_date < ?", start, end+" 23:59:59")
+    if len(ids) > 0 { qpt = qpt.Where("pe.base_id IN ?", ids) }
+    qpt.Group("curr").Scan(&pByCurr)
+    for _, r0 := range pByCurr { rate := rates[r0.Curr]; if rate == 0 { rate = 1 }; resp.TotalPurchase += r0.Total * rate }
 
     // Purchases by supplier
-    var ps []struct{ Supplier string; Total float64; Cnt int64 }
+    var ps []struct{ Supplier string; Curr string; Total float64; Cnt int64 }
     qps := db.DB.Table("purchase_entries pe").
-        Select("s.name as supplier, COALESCE(SUM(pe.total_amount),0) as total, COUNT(pe.id) as cnt").
+        Select("s.name as supplier, COALESCE(b.currency,'CNY') as curr, COALESCE(SUM(pe.total_amount),0) as total, COUNT(pe.id) as cnt").
         Joins("LEFT JOIN suppliers s ON pe.supplier_id = s.id").
+        Joins("LEFT JOIN bases b ON b.id = pe.base_id").
         Where("pe.purchase_date >= ? AND pe.purchase_date < ?", start, end+" 23:59:59")
     if len(ids) > 0 { qps = qps.Where("pe.base_id IN ?", ids) }
-    qps.Group("s.name").Order("total DESC").Scan(&ps)
-    for _, x := range ps { resp.PurchaseBySupplier = append(resp.PurchaseBySupplier, PurchaseBySupplierRow{Supplier: x.Supplier, Total: x.Total, Count: x.Cnt}) }
+    qps.Group("s.name, curr").Order("total DESC").Scan(&ps)
+    for _, x := range ps { rate := rates[x.Curr]; if rate == 0 { rate = 1 }; resp.PurchaseBySupplier = append(resp.PurchaseBySupplier, PurchaseBySupplierRow{Supplier: x.Supplier, Total: x.Total * rate, Count: x.Cnt}) }
 
     // Purchases by base
-    var pb []struct{ Base string; Total float64 }
+    var pb []struct{ Base string; Curr string; Total float64 }
     qpb := db.DB.Table("purchase_entries pe").
-        Select("b.name as base, COALESCE(SUM(pe.total_amount),0) as total").
+        Select("b.name as base, COALESCE(b.currency,'CNY') as curr, COALESCE(SUM(pe.total_amount),0) as total").
         Joins("LEFT JOIN bases b ON pe.base_id = b.id").
         Where("pe.purchase_date >= ? AND pe.purchase_date < ?", start, end+" 23:59:59")
     if len(ids) > 0 { qpb = qpb.Where("pe.base_id IN ?", ids) }
-    qpb.Group("b.name").Order("total DESC").Scan(&pb)
-    for _, x := range pb { resp.PurchaseByBase = append(resp.PurchaseByBase, PurchaseByBaseRow{Base: x.Base, Total: x.Total}) }
+    qpb.Group("b.name, curr").Order("total DESC").Scan(&pb)
+    for _, x := range pb { rate := rates[x.Curr]; if rate == 0 { rate = 1 }; resp.PurchaseByBase = append(resp.PurchaseByBase, PurchaseByBaseRow{Base: x.Base, Total: x.Total * rate}) }
 
     w.Header().Set("Content-Type", "application/json")
     _ = json.NewEncoder(w).Encode(resp)

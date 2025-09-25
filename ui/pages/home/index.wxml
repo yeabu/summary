@@ -1,0 +1,8 @@
+<view class="grid">
+  <view class="tile" bindtap="goPayable">应付款管理</view>
+  <view class="tile" bindtap="goSupplier">供应商管理</view>
+  <view class="tile" bindtap="goProduct">商品管理</view>
+  <view class="tile" bindtap="goBase">基地管理</view>
+  <view class="tile" bindtap="goUser">人员管理</view>
+  <view class="tile" bindtap="goCategory">类别管理</view>
+</view>

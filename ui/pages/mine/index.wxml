@@ -1,0 +1,36 @@
+<view class="card">
+  <view class="col" style="gap: 8rpx;">
+    <text>角色：{{role}}</text>
+    <button size="mini" bindtap="logout">退出登录</button>
+  </view>
+</view>
+
+<view class="card">
+  <view class="col" style="gap: 12rpx;">
+    <text class="muted">修改密码</text>
+    <input placeholder="原密码" password="true" bindinput="onOld" class="input"></input>
+    <input placeholder="新密码" password="true" bindinput="onNew" class="input"></input>
+    <button size="mini" bindtap="changePwd" loading="{{loading}}">提交</button>
+  </view>
+</view>
+
+<view class="card">
+  <view class="col" style="gap: 12rpx;">
+    <text class="muted">个性化</text>
+    <view class="row" style="gap: 12rpx; align-items:center;">
+      <text>语言</text>
+      <picker mode="selector" range="{{langs}}" value="{{langIndex}}" bindchange="onLang">
+        <view class="picker">{{langs[langIndex]}}</view>
+      </picker>
+    </view>
+    <view class="row" style="gap: 12rpx; align-items:center;">
+      <text>主题色</text>
+      <view class="row" style="gap: 12rpx;">
+        <view style="width:48rpx;height:48rpx;border-radius:50%;background:#B4282D; border:2rpx solid #eee;" bindtap="setTheme" data-color="#B4282D"></view>
+        <view style="width:48rpx;height:48rpx;border-radius:50%;background:#1C6DD0; border:2rpx solid #eee;" bindtap="setTheme" data-color="#1C6DD0"></view>
+        <view style="width:48rpx;height:48rpx;border-radius:50%;background:#07C160; border:2rpx solid #eee;" bindtap="setTheme" data-color="#07C160"></view>
+      </view>
+    </view>
+  </view>
+  
+</view>

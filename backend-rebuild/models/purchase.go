@@ -9,6 +9,7 @@ type PurchaseEntry struct {
     OrderNumber  string              `json:"order_number"`
     PurchaseDate time.Time           `gorm:"index:idx_pe_supplier_base_date,priority:3" json:"purchase_date"`
     TotalAmount  float64             `json:"total_amount"`
+    Currency     string              `gorm:"size:8;default:'CNY'" json:"currency"`
     Receiver     string              `json:"receiver"`
     BaseID       uint                `gorm:"index:idx_pe_supplier_base_date,priority:2;not null" json:"base_id"`
     Base         Base                `gorm:"foreignKey:BaseID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT" json:"base"`

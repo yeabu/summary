@@ -1,0 +1,43 @@
+<view class="card" wx:for="{{items}}" wx:key="id">
+  <view class="row" style="justify-content: space-between;">
+    <view class="col">
+      <text>{{item.supplierName}}</text>
+      <text class="muted">{{item.baseName}}</text>
+    </view>
+    <view class="col" style="align-items:flex-end;">
+      <text style="font-weight:600;">¥{{item.remaining}}</text>
+      <text class="muted">状态：{{item.status}}</text>
+      <view>
+        <button size="mini" bindtap="openPay" data-id="{{item.id}}">还款</button>
+        <button size="mini" bindtap="openDetail" data-id="{{item.id}}">详情</button>
+        <button size="mini" type="warn" bindtap="explainDelete">删除</button>
+      </view>
+    </view>
+  </view>
+</view>
+
+<view class="fab" bindtap="goCreatePurchase" style="{{fabStyle}}">
+  <view class="fab-inner">
+    <view class="fab-bar"></view>
+    <view class="fab-bar v"></view>
+  </view>
+</view>
+
+<view class="sheet" wx:if="{{payOpen}}">
+  <view class="sheet-body">
+    <view class="row" style="justify-content: space-between; align-items:center;">
+      <text style="font-weight:600;">新增还款</text>
+      <button size="mini" bindtap="closePay">关闭</button>
+    </view>
+    <view class="field"><text class="label">金额</text><input class="input" type="number" value="{{payForm.payment_amount}}" bindinput="iPayAmount"/></view>
+    <view class="field"><text class="label">日期</text><picker mode="date" value="{{payForm.payment_date}}" bindchange="onPayDate"><view class="picker">{{payForm.payment_date || '选择日期'}}</view></picker></view>
+    <view class="field"><text class="label">方式</text>
+      <picker mode="selector" range="{{methodRange}}" value="{{methodIndex}}" bindchange="onMethod">
+        <view class="picker">{{methodRange[methodIndex]}}</view>
+      </picker>
+    </view>
+    <view class="field"><text class="label">凭证号</text><input class="input" value="{{payForm.reference_number}}" bindinput="iRef"/></view>
+    <view class="field"><text class="label">备注</text><input class="input" value="{{payForm.notes}}" bindinput="iNotes"/></view>
+    <button class="btn-primary" bindtap="savePayment" loading="{{saving}}">保存</button>
+  </view>
+</view>

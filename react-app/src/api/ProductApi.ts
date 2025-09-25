@@ -6,6 +6,7 @@ export interface ProductItem {
   base_unit?: string;
   spec?: string;
   unit_price?: number;
+  currency?: string;
   supplier_id?: number;
   status?: string;
   supplier?: { id: number; name: string } | null;
@@ -52,10 +53,10 @@ export class ProductApi {
     if (q?.offset) p.append('offset', String(q.offset));
     return this.req(`/api/product/list?${p.toString()}`);
   }
-  async createProduct(data: { name: string; base_unit?: string; spec?: string; unit_price?: number; supplier_id?: number; status?: string }) {
+  async createProduct(data: { name: string; base_unit?: string; spec?: string; unit_price?: number; currency?: string; supplier_id?: number; status?: string }) {
     return this.req(`/api/product/create`, { method: 'POST', body: JSON.stringify(data) });
   }
-  async updateProduct(id: number, data: { name?: string; base_unit?: string; spec?: string; unit_price?: number; supplier_id?: number; status?: string }) {
+  async updateProduct(id: number, data: { name?: string; base_unit?: string; spec?: string; unit_price?: number; currency?: string; supplier_id?: number; status?: string }) {
     return this.req(`/api/product/update?id=${id}`, { method: 'PUT', body: JSON.stringify(data) });
   }
   async deleteProduct(id: number) {

@@ -1,0 +1,52 @@
+<block wx:if="{{items && items.length}}">
+  <view class="cell-group">
+    <view class="cell" wx:for="{{items}}" wx:key="id">
+      <view class="col">
+        <text class="cell-title">{{item.name}}</text>
+        <text class="cell-desc">{{item.contact_person || ''}} {{item.phone || ''}}</text>
+      </view>
+      <view class="row" style="gap: 12rpx; align-items:center;">
+        <text class="cell-value">{{item.settlement_type || ''}}</text>
+        <button size="mini" bindtap="onEdit" data-id="{{item.id}}">编辑</button>
+        <button size="mini" type="warn" bindtap="onDelete" data-id="{{item.id}}">删除</button>
+      </view>
+    </view>
+  </view>
+  </block>
+<block wx:else>
+  <view class="empty">
+    <text>暂无供应商数据</text>
+  </view>
+</block>
+
+<view class="fab" bindtap="openCreate">
+  <view class="fab-inner">
+    <view class="fab-bar"></view>
+    <view class="fab-bar v"></view>
+  </view>
+</view>
+
+<view class="sheet" wx:if="{{formOpen}}">
+  <view class="sheet-body">
+    <view class="row" style="justify-content: space-between; align-items:center;">
+      <text style="font-weight:600;">{{form.id ? '编辑供应商' : '新增供应商'}}</text>
+      <button size="mini" bindtap="closeForm">关闭</button>
+    </view>
+    <view class="cell-group">
+      <view class="cell"><text class="cell-title">名称</text><input class="input" value="{{form.name}}" bindinput="iName"/></view>
+      <view class="cell"><text class="cell-title">联系人</text><input class="input" value="{{form.contact_person}}" bindinput="iContact"/></view>
+      <view class="cell"><text class="cell-title">电话</text><input class="input" value="{{form.phone}}" bindinput="iPhone"/></view>
+      <view class="cell"><text class="cell-title">邮箱</text><input class="input" value="{{form.email}}" bindinput="iEmail"/></view>
+      <view class="cell"><text class="cell-title">地址</text><input class="input" value="{{form.address}}" bindinput="iAddress"/></view>
+      <view class="cell">
+        <text class="cell-title">结算方式</text>
+        <picker mode="selector" range="{{settleRange}}" value="{{settleIndex}}" bindchange="onSettle">
+          <view class="picker">{{settleRange[settleIndex]}}</view>
+        </picker>
+      </view>
+      <view class="cell" wx:if="{{form.settlement_type=='monthly'}}"><text class="cell-title">月结日</text><input class="input" type="number" value="{{form.settlement_day}}" bindinput="iDay"/></view>
+    </view>
+    <view class="spacer"></view>
+    <button class="btn-primary" bindtap="save" loading="{{saving}}">保存</button>
+  </view>
+</view>

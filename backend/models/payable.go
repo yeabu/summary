@@ -13,8 +13,9 @@ type PayableRecord struct {
 	Supplier        *Supplier       `gorm:"foreignKey:SupplierID" json:"supplier,omitempty"`                       // 关联的供应商
 	BaseID          uint            `gorm:"not null" json:"base_id"`                                               // 基地ID
 	Base            Base            `gorm:"foreignKey:BaseID" json:"base"`                                         // 关联的基地
-	TotalAmount     float64         `gorm:"type:decimal(15,2);not null" json:"total_amount"`                       // 应付总金额
-	PaidAmount      float64         `gorm:"type:decimal(15,2);default:0" json:"paid_amount"`                       // 已付金额
+    TotalAmount     float64         `gorm:"type:decimal(15,2);not null" json:"total_amount"`                       // 应付总金额
+    PaidAmount      float64         `gorm:"type:decimal(15,2);default:0" json:"paid_amount"`                       // 已付金额
+    Currency        string          `gorm:"size:8;default:CNY" json:"currency"`                                     // 币种
     RemainingAmount float64         `gorm:"type:decimal(15,2);not null" json:"remaining_amount"`                   // 剩余欠款
     Status          string          `gorm:"type:enum('pending','partial','paid');default:'pending'" json:"status"` // 状态
     DueDate         *time.Time      `json:"due_date"`                                                              // 到期日期
@@ -36,7 +37,8 @@ type PaymentRecord struct {
 	ID              uint          `gorm:"primaryKey" json:"id"`
 	PayableRecordID uint          `gorm:"not null" json:"payable_record_id"`                                                               // 关联应付款记录ID
 	PayableRecord   PayableRecord `gorm:"foreignKey:PayableRecordID" json:"-"`                                                             // 关联的应付款记录
-	PaymentAmount   float64       `gorm:"type:decimal(15,2);not null" json:"payment_amount"`                                               // 还款金额
+    PaymentAmount   float64       `gorm:"type:decimal(15,2);not null" json:"payment_amount"`                                               // 还款金额
+    Currency        string        `gorm:"size:8;default:CNY" json:"currency"`                                                               // 币种
 	PaymentDate     time.Time     `gorm:"type:date;not null" json:"payment_date"`                                                          // 还款日期
 	PaymentMethod   string        `gorm:"type:enum('cash','bank_transfer','check','other');default:'bank_transfer'" json:"payment_method"` // 还款方式
 	ReferenceNumber string        `gorm:"size:100" json:"reference_number"`                                                                // 参考号

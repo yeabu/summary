@@ -43,6 +43,7 @@ import UserForm from '@/components/UserForm';
 import BatchOperations, { BatchAction } from '@/components/BatchOperations';
 import { useNotification } from '@/components/NotificationProvider';
 import { ApiClient } from '@/api/ApiClient';
+import { useMemo } from 'react';
 
 const UserManagementView: React.FC = () => {
   const notification = useNotification();
@@ -87,7 +88,7 @@ const UserManagementView: React.FC = () => {
   ];
   
   // 创建 ApiClient 实例
-  const apiClient = new ApiClient();
+  const apiClient = useMemo(() => new ApiClient(), []);
 
   const loadBases = async () => {
     try {

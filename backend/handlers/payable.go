@@ -421,15 +421,16 @@ func CreatePayment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 创建还款记录
-	payment := models.PaymentRecord{
-		PayableRecordID: req.PayableID,
-		PaymentAmount:   req.Amount,
-		PaymentDate:     paymentDate,
-		PaymentMethod:   req.PaymentMethod,
-		ReferenceNumber: req.Reference,
-		Notes:           req.Note,
-		CreatedBy:       userID,
-	}
+    payment := models.PaymentRecord{
+        PayableRecordID: req.PayableID,
+        PaymentAmount:   req.Amount,
+        Currency:        payable.Currency,
+        PaymentDate:     paymentDate,
+        PaymentMethod:   req.PaymentMethod,
+        ReferenceNumber: req.Reference,
+        Notes:           req.Note,
+        CreatedBy:       userID,
+    }
 
 	if err := tx.Create(&payment).Error; err != nil {
 		tx.Rollback()
@@ -702,4 +703,61 @@ func UpdatePayableStatus(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "应付款状态更新成功"})
+}
+
+// DeletePayable 删除一条应付款记录（仅管理员，且无还款记录才可删除）
+func DeletePayable(w http.ResponseWriter, r *http.Request) {
+    claims, err := middleware.ParseJWT(r)
+    if err != nil {
+        http.Error(w, "token无效", http.StatusUnauthorized)
+        return
+    }
+    role := claims["role"].(string)
+    if role != "admin" {
+        http.Error(w, "无权删除应付款记录", http.StatusForbidden)
+        return
+    }
+
+    idStr := r.URL.Query().Get("id")
+    id, _ := strconv.ParseUint(idStr, 10, 64)
+    if id == 0 {
+        http.Error(w, "无效的应付款ID", http.StatusBadRequest)
+        return
+    }
+
+    var pr models.PayableRecord
+    if err := db.DB.First(&pr, id).Error; err != nil {
+        http.Error(w, "应付款记录不存在", http.StatusNotFound)
+        return
+    }
+
+    // 若存在还款记录，禁止删除
+    var payCnt int64
+    if err := db.DB.Model(&models.PaymentRecord{}).Where("payable_record_id = ?", pr.ID).Count(&payCnt).Error; err == nil && payCnt > 0 {
+        http.Error(w, "该应付款存在还款记录，无法删除", http.StatusConflict)
+        return
+    }
+
+    tx := db.DB.Begin()
+    if tx.Error != nil {
+        http.Error(w, "事务启动失败", http.StatusInternalServerError)
+        return
+    }
+    if err := tx.Where("payable_record_id = ?", pr.ID).Delete(&models.PayableLink{}).Error; err != nil {
+        tx.Rollback()
+        http.Error(w, "删除关联链接失败", http.StatusInternalServerError)
+        return
+    }
+    if err := tx.Delete(&models.PayableRecord{}, pr.ID).Error; err != nil {
+        tx.Rollback()
+        http.Error(w, "删除失败", http.StatusInternalServerError)
+        return
+    }
+    if err := tx.Commit().Error; err != nil {
+        http.Error(w, "提交失败", http.StatusInternalServerError)
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]any{"success": true})
 }

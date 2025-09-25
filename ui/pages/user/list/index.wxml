@@ -1,0 +1,52 @@
+<view class="card" wx:for="{{items}}" wx:key="id">
+  <view class="row" style="justify-content: space-between;">
+    <view class="col">
+      <text>{{item.name}}</text>
+      <text class="muted">{{item.role}}</text>
+    </view>
+    <view class="col" style="align-items:flex-end;">
+      <text class="muted">{{item.baseNames}}</text>
+      <view>
+        <button size="mini" bindtap="onEdit" data-id="{{item.id}}">编辑</button>
+        <button size="mini" type="warn" bindtap="onDelete" data-id="{{item.id}}">删除</button>
+      </view>
+    </view>
+  </view>
+</view>
+
+<view class="fab" bindtap="openCreate" style="{{fabStyle}}">
+  <view class="fab-inner">
+    <view class="fab-bar"></view>
+    <view class="fab-bar v"></view>
+  </view>
+</view>
+
+<view class="sheet" wx:if="{{formOpen}}">
+  <view class="sheet-body">
+    <view class="row" style="justify-content: space-between; align-items:center;">
+      <text style="font-weight:600;">{{form.id ? '编辑用户' : '新增用户'}}</text>
+      <button size="mini" bindtap="closeForm">关闭</button>
+    </view>
+    <view class="cell-group">
+      <view class="cell"><text class="cell-title">用户名</text><input class="input" value="{{form.name}}" bindinput="iName"/></view>
+      <view class="cell">
+        <text class="cell-title">角色</text>
+        <picker mode="selector" range="{{roleRange}}" value="{{roleIndex}}" bindchange="onRole"><view class="picker">{{roleRange[roleIndex]}}</view></picker>
+      </view>
+      <view class="cell" wx:if="{{!form.id}}"><text class="cell-title">密码</text><input class="input" password="true" value="{{form.password}}" bindinput="iPwd"/></view>
+    </view>
+    <view class="cell-group" style="margin-top: 16rpx;">
+      <view class="cell" style="flex-direction: column; align-items: stretch;">
+        <text class="cell-title">所属基地</text>
+        <checkbox-group bindchange="onBases">
+          <label wx:for="{{bases}}" wx:key="id" class="row" style="gap: 12rpx; margin: 6rpx 0;">
+            <checkbox value="{{item.id}}" checked="{{checkedBaseIds[item.id]}}"/>
+            <text>{{item.name}}</text>
+          </label>
+        </checkbox-group>
+      </view>
+    </view>
+    <view class="spacer"></view>
+    <button class="btn-primary" bindtap="save" loading="{{saving}}">保存</button>
+  </view>
+</view>

@@ -41,6 +41,7 @@ import BaseSectionForm from '@/components/BaseSectionForm';
 import BatchOperations, { BatchAction } from '@/components/BatchOperations';
 import { useNotification } from '@/components/NotificationProvider';
 import { ApiClient } from '@/api/ApiClient';
+import { useMemo } from 'react';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
 const BaseSectionManagementView: React.FC = () => {
@@ -76,7 +77,7 @@ const BaseSectionManagementView: React.FC = () => {
   ];
   
   // 创建 ApiClient 实例
-  const apiClient = new ApiClient();
+  const apiClient = useMemo(() => new ApiClient(), []);
 
   // 加载基地数据
   const loadBases = async () => {

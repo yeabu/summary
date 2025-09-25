@@ -8,6 +8,7 @@ export interface BaseExpense {
   category: ExpenseCategory;  // 保持category对象用于显示
   category_id: number;        // 添加category_id字段用于提交
   amount: number;
+  currency?: string;
   detail?: string;
   created_by?: number;
   creator_name?: string;

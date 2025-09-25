@@ -17,6 +17,7 @@ export interface PayableRecord {
   paid_amount: number;
   remaining_amount: number;
   status: 'pending' | 'partial' | 'paid';
+  currency?: string; // 币种代码，例如 CNY/LAK/THB
   due_date?: string;
   period_month?: string;
   period_half?: string;
@@ -163,6 +164,13 @@ export class PayableApi {
   // 获取超期应付款
   async getOverduePayables(): Promise<PayableRecord[]> {
     return apiCall<PayableRecord[]>('/api/payable/overdue');
+  }
+
+  // 删除应付款（仅管理员）
+  async deletePayable(id: number): Promise<void> {
+    await apiCall('/api/payable/delete?id=' + id, {
+      method: 'DELETE',
+    });
   }
 
   // 创建还款记录

@@ -29,7 +29,7 @@ const ProductManagementView: React.FC = () => {
 
   const [openDialog, setOpenDialog] = useState(false);
   const [editing, setEditing] = useState<ProductItem | null>(null);
-  const [form, setForm] = useState<{ name: string; base_unit: string; spec: string; unit_price: string; supplier_id: number | '' }>({ name: '', base_unit: '', spec: '', unit_price: '', supplier_id: '' });
+  const [form, setForm] = useState<{ name: string; base_unit: string; spec: string; unit_price: string; currency: string; supplier_id: number | '' }>({ name: '', base_unit: '', spec: '', unit_price: '', currency: 'CNY', supplier_id: '' });
   const [specOpen, setSpecOpen] = useState(false);
   const [specTarget, setSpecTarget] = useState<ProductItem | null>(null);
   const [specs, setSpecs] = useState<Array<{ id:number; unit:string; factor_to_base:number; kind:string; is_default:boolean }>>([]);
@@ -61,7 +61,7 @@ const ProductManagementView: React.FC = () => {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ name: '', base_unit: '', spec: '', unit_price: '', supplier_id: '' });
+    setForm({ name: '', base_unit: '', spec: '', unit_price: '', currency: 'CNY', supplier_id: '' });
     setOpenDialog(true);
   };
   const openEdit = (p: ProductItem) => {
@@ -71,6 +71,7 @@ const ProductManagementView: React.FC = () => {
       base_unit: p.base_unit || '',
       spec: p.spec || '',
       unit_price: (p.unit_price ?? '').toString(),
+      currency: p.currency || 'CNY',
       supplier_id: p.supplier_id ?? ''
     });
     setOpenDialog(true);
@@ -128,6 +129,7 @@ const ProductManagementView: React.FC = () => {
         base_unit: form.base_unit.trim() || undefined,
         spec: form.spec.trim() || undefined,
         unit_price: form.unit_price ? Number(form.unit_price) : undefined,
+        currency: form.currency || 'CNY',
         supplier_id: form.supplier_id || undefined,
       };
       if (!payload.name) { notification.showError('请填写商品名称'); return; }
@@ -236,6 +238,7 @@ const ProductManagementView: React.FC = () => {
               <TableCell>规格</TableCell>
               <TableCell>单位</TableCell>
               <TableCell>单价</TableCell>
+              <TableCell>币种</TableCell>
               <TableCell>供应商</TableCell>
               <TableCell align="right">操作</TableCell>
             </TableRow>
@@ -248,6 +251,7 @@ const ProductManagementView: React.FC = () => {
                 <TableCell>{p.spec || '-'}</TableCell>
                 <TableCell>{p.base_unit || '-'}</TableCell>
                 <TableCell>{p.unit_price != null ? p.unit_price.toFixed(2) : '-'}</TableCell>
+                <TableCell>{p.currency || 'CNY'}</TableCell>
                 <TableCell>{p.supplier?.name || '-'}</TableCell>
                 <TableCell align="right">
                   <Tooltip title="管理规格"><span><IconButton onClick={() => openSpec(p)}><TuneIcon /></IconButton></span></Tooltip>
@@ -291,6 +295,13 @@ const ProductManagementView: React.FC = () => {
               </Grid>
               <Grid item xs={12} md={6}>
                 <TextField fullWidth label="单价" type="number" inputProps={{ step: '0.01' }} value={form.unit_price} onChange={(e) => setForm({ ...form, unit_price: e.target.value })} />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField select fullWidth label="币种" value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
+                  <MenuItem value="CNY">CNY 人民币</MenuItem>
+                  <MenuItem value="LAK">LAK 老挝基普</MenuItem>
+                  <MenuItem value="THB">THB 泰铢</MenuItem>
+                </TextField>
               </Grid>
               <Grid item xs={12} md={12}>
                 <TextField select fullWidth label="供应商" value={form.supplier_id} onChange={(e) => setForm({ ...form, supplier_id: e.target.value === '' ? '' : Number(e.target.value) })}>

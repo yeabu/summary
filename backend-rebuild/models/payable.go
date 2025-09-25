@@ -13,6 +13,7 @@ type PayableRecord struct {
     TotalAmount      float64        `gorm:"type:decimal(15,2);not null" json:"total_amount"`
     PaidAmount       float64        `gorm:"type:decimal(15,2);default:0" json:"paid_amount"`
     RemainingAmount  float64        `gorm:"type:decimal(15,2);not null" json:"remaining_amount"`
+    Currency         string         `gorm:"size:8;default:'CNY'" json:"currency"`
     Status           string         `gorm:"type:enum('pending','partial','paid');default:'pending';index:idx_payable_supplier_base_status,priority:3" json:"status"`
     DueDate          *time.Time     `gorm:"index" json:"due_date"`
     PeriodMonth      string         `gorm:"size:7" json:"period_month,omitempty"`
@@ -31,6 +32,7 @@ type PaymentRecord struct {
     PayableRecordID uint          `gorm:"index;not null" json:"payable_record_id"`
     PayableRecord   PayableRecord `gorm:"foreignKey:PayableRecordID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"-"`
     PaymentAmount   float64       `gorm:"type:decimal(15,2);not null" json:"payment_amount"`
+    Currency        string        `gorm:"size:8;default:'CNY'" json:"currency"`
     PaymentDate     time.Time     `gorm:"type:date;not null" json:"payment_date"`
     PaymentMethod   string        `gorm:"size:32;default:'bank_transfer';index" json:"payment_method"`
     ReferenceNumber string        `gorm:"size:100" json:"reference_number"`

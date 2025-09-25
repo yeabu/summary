@@ -4,7 +4,7 @@
  * 提供主要功能的快速导航和用户菜单
  * 根据用户角色显示不同的菜单选项
  */
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AppBar,
@@ -13,6 +13,7 @@ import {
   Typography,
   Box,
   useTheme,
+  useMediaQuery,
   Button,
   Tooltip,
   Menu,
@@ -34,6 +35,8 @@ import {
   AccountBalanceWallet as PayableIcon,
   Storefront as SupplierIcon,
   Category as CategoryIcon,
+  Warehouse as WarehouseIcon,
+  MoreHoriz as MoreIcon,
 } from '@mui/icons-material';
 import UserMenu from './UserMenu';
 import useAuthStore from '../auth/AuthStore';
@@ -45,8 +48,12 @@ const StandardAppBar: React.FC = () => {
   const navigate = useNavigate();
   const theme = useTheme();
   const { toggleDarkMode, darkMode } = useThemeContext();
+  const isMdUp = useMediaQuery(theme.breakpoints.up('md'));
+  const isLgUp = useMediaQuery(theme.breakpoints.up('lg'));
+  const isXlUp = useMediaQuery(theme.breakpoints.up('xl'));
   const user = useAuthStore((state) => state.user);
   const isAdmin = user?.role === 'admin';
+  const isBaseAgent = user?.role === 'base_agent';
   
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
   const menuOpen = Boolean(menuAnchorEl);
@@ -94,18 +101,24 @@ const StandardAppBar: React.FC = () => {
       label: '应付款管理',
       path: '/payable/list',
       icon: <PayableIcon />,
-      available: true
+      available: isAdmin
     },
     {
       label: '供应商管理',
       path: '/supplier/management',
       icon: <SupplierIcon />,
-      available: true
+      available: isAdmin
     },
     {
       label: '商品管理',
       path: '/product/management',
       icon: <InventoryIcon />,
+      available: isAdmin
+    },
+    {
+      label: '库存管理',
+      path: '/inventory/management',
+      icon: <WarehouseIcon />,
       available: true
     },
     {
@@ -130,7 +143,7 @@ const StandardAppBar: React.FC = () => {
       label: '人员管理',
       path: '/user/management',
       icon: <UserIcon />,
-      available: isAdmin
+      available: isAdmin || isBaseAgent
     },
     {
       label: '类别管理',
@@ -140,7 +153,19 @@ const StandardAppBar: React.FC = () => {
     }
   ];
 
-  const availableNavItems = navigationItems.filter(item => item.available);
+  const availableNavItems = useMemo(() => navigationItems.filter(item => item.available), [navigationItems]);
+
+  // Visible vs overflow (center area)
+  const maxVisible = useMemo(() => {
+    if (isXlUp) return 8;
+    if (isLgUp) return 6;
+    if (isMdUp) return 4;
+    return 0;
+  }, [isMdUp, isLgUp, isXlUp]);
+  const visibleNavItems = availableNavItems.slice(0, maxVisible);
+  const overflowNavItems = availableNavItems.slice(maxVisible);
+  const [moreAnchor, setMoreAnchor] = useState<null | HTMLElement>(null);
+  const moreOpen = Boolean(moreAnchor);
 
   // Determine a single active path (avoid multiple highlights and '/' always-on)
   const calcMatchLen = (path: string) => {
@@ -197,12 +222,12 @@ const StandardAppBar: React.FC = () => {
         <Box sx={{ 
           display: { xs: 'none', md: 'flex' }, 
           alignItems: 'center',
-          gap: 0.5,
+          gap: 0.25,
           position: 'absolute',
           left: '50%',
           transform: 'translateX(-50%)'
         }}>
-          {availableNavItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const active = isActive(item.path);
             return (
               <Button
@@ -215,7 +240,7 @@ const StandardAppBar: React.FC = () => {
                   textTransform: 'none',
                   fontWeight: active ? 700 : 500,
                   fontSize: 12,
-                  px: 1.25,
+                  px: 1,
                   py: 0.25,
                   borderRadius: 8,
                   backgroundColor: 'transparent',
@@ -224,7 +249,7 @@ const StandardAppBar: React.FC = () => {
                   transformOrigin: 'center',
                   '&:hover': {
                     backgroundColor: 'transparent',
-                    transform: 'scale(1.12)'
+                    transform: 'scale(1.08)'
                   },
                   '& .MuiButton-startIcon': {
                     mr: 0.5,
@@ -236,6 +261,41 @@ const StandardAppBar: React.FC = () => {
               </Button>
             );
           })}
+          {overflowNavItems.length > 0 && (
+            <>
+              <Button
+                onClick={(e) => setMoreAnchor(e.currentTarget)}
+                startIcon={<MoreIcon />}
+                sx={{
+                  color: textColor,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  fontSize: 12,
+                  px: 1,
+                  py: 0.25,
+                  borderRadius: 8,
+                }}
+              >
+                更多
+              </Button>
+              <Menu
+                anchorEl={moreAnchor}
+                open={moreOpen}
+                onClose={() => setMoreAnchor(null)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'center' }}
+              >
+                {overflowNavItems.map((item) => (
+                  <MenuItem key={item.path} onClick={() => { navigate(item.path); setMoreAnchor(null); }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      {item.icon}
+                      {item.label}
+                    </Box>
+                  </MenuItem>
+                ))}
+              </Menu>
+            </>
+          )}
         </Box>
 
         {/* Right side - Menu for mobile and User Menu */}

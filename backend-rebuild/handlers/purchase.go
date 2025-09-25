@@ -75,6 +75,10 @@ func CreatePurchase(w http.ResponseWriter, r *http.Request) {
     var base models.Base
     if err := tx.First(&base, req.BaseID).Error; err != nil { tx.Rollback(); http.Error(w, "基地不存在", http.StatusBadRequest); return }
 
+    // Determine currency: prefer base currency if set, else default CNY
+    cur := base.Currency
+    if cur == "" { cur = "CNY" }
+
     // Upsert products (by name) and set ProductID on items if needed; also fill suggested price when unit_price is empty
     items := make([]models.PurchaseEntryItem, len(req.Items))
     for i, it := range req.Items {
@@ -122,6 +126,7 @@ func CreatePurchase(w http.ResponseWriter, r *http.Request) {
         OrderNumber: req.OrderNumber,
         PurchaseDate: pd,
         TotalAmount: req.TotalAmount,
+        Currency: cur,
         Receiver: req.Receiver,
         BaseID: req.BaseID,
         CreatedBy: 0,
@@ -135,11 +140,11 @@ func CreatePurchase(w http.ResponseWriter, r *http.Request) {
 
     // Payable aggregation
     periodMonth, periodHalf, due := computePeriod(pd, sup.SettlementType, sup.SettlementDay)
-    payable, err := findOrCreateOpenPayable(tx, *req.SupplierID, req.BaseID, sup.SettlementType, periodMonth, periodHalf, due)
+    payable, err := findOrCreateOpenPayable(tx, *req.SupplierID, req.BaseID, sup.SettlementType, periodMonth, periodHalf, due, cur)
     if err != nil { tx.Rollback(); http.Error(w, err.Error(), http.StatusInternalServerError); return }
 
     // Link purchase to payable
-    link := models.PayableLink{ PayableRecordID: payable.ID, PurchaseEntryID: p.ID, Amount: req.TotalAmount }
+    link := models.PayableLink{ PayableRecordID: payable.ID, PurchaseEntryID: p.ID, Amount: req.TotalAmount, Currency: cur }
     if err := tx.Create(&link).Error; err != nil { tx.Rollback(); http.Error(w, "创建应付款链接失败", http.StatusInternalServerError); return }
 
     // Recalc payable totals from links
@@ -182,7 +187,7 @@ func computePeriod(pd time.Time, settlementType string, settlementDay *int) (per
     return
 }
 
-func findOrCreateOpenPayable(tx *gorm.DB, supplierID, baseID uint, settlementType, periodMonth, periodHalf string, due *time.Time) (models.PayableRecord, error) {
+func findOrCreateOpenPayable(tx *gorm.DB, supplierID, baseID uint, settlementType, periodMonth, periodHalf string, due *time.Time, currency string) (models.PayableRecord, error) {
     var pr models.PayableRecord
     // Lock rows for this supplier+base to prevent concurrent duplicate creation (gap lock on index range)
     tx.Table("payable_records").Where("supplier_id = ? AND base_id = ?", supplierID, baseID).Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Find(&[]struct{}{})
@@ -202,6 +207,7 @@ func findOrCreateOpenPayable(tx *gorm.DB, supplierID, baseID uint, settlementTyp
             TotalAmount: 0,
             PaidAmount: 0,
             RemainingAmount: 0,
+            Currency: currency,
             Status: "pending",
             CreatedAt: time.Now(),
             UpdatedAt: time.Now(),

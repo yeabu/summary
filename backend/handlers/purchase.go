@@ -12,6 +12,8 @@ import (
     "strings"
     "strconv"
     "time"
+    "io"
+    "path/filepath"
 )
 
 type PurchaseItemReq struct {
@@ -22,13 +24,14 @@ type PurchaseItemReq struct {
     Amount      float64 `json:"amount"`
 }
 type PurchaseReq struct {
-	SupplierID   *uint             `json:"supplier_id,omitempty"` // 供应商ID
-	OrderNumber  string            `json:"order_number"`
-	PurchaseDate string            `json:"purchase_date"` // yyyy-mm-dd
-	TotalAmount  float64           `json:"total_amount"`
-	Receiver     string            `json:"receiver"`
-	BaseID       uint              `json:"base_id"` // 所属基地ID
-	Items        []PurchaseItemReq `json:"items"`
+    SupplierID   *uint             `json:"supplier_id,omitempty"` // 供应商ID
+    OrderNumber  string            `json:"order_number"`
+    PurchaseDate string            `json:"purchase_date"` // yyyy-mm-dd
+    TotalAmount  float64           `json:"total_amount"`
+    Currency     string            `json:"currency"`
+    Receiver     string            `json:"receiver"`
+    BaseID       uint              `json:"base_id"` // 所属基地ID
+    Items        []PurchaseItemReq `json:"items"`
 }
 
 func CreatePurchase(w http.ResponseWriter, r *http.Request) {
@@ -183,11 +186,22 @@ func CreatePurchase(w http.ResponseWriter, r *http.Request) {
     if v, ok := claims["username"]; ok && v != nil {
         if s, ok2 := v.(string); ok2 { creatorName = s }
     }
+    // 确定采购币种：优先使用请求中的currency，其次首个商品的币种，最后默认CNY
+    purchaseCurrency := strings.ToUpper(strings.TrimSpace(req.Currency))
+    if purchaseCurrency == "" && len(req.Items) > 0 {
+        var prodCur models.Product
+        if err := db.DB.Where("name = ?", strings.TrimSpace(req.Items[0].ProductName)).First(&prodCur).Error; err == nil && prodCur.Currency != "" {
+            purchaseCurrency = prodCur.Currency
+        }
+    }
+    if purchaseCurrency == "" { purchaseCurrency = "CNY" }
+
     p := models.PurchaseEntry{
         SupplierID:   req.SupplierID, // 使用SupplierID而不是Supplier
         OrderNumber:  req.OrderNumber,
         PurchaseDate: pd,
         TotalAmount:  req.TotalAmount,
+        Currency:     purchaseCurrency,
         Receiver:     req.Receiver,
         BaseID:       baseID,
         CreatedBy:    creatorID,
@@ -334,6 +348,7 @@ func CreatePurchase(w http.ResponseWriter, r *http.Request) {
             TotalAmount:     req.TotalAmount,
             PaidAmount:      0,
             RemainingAmount: req.TotalAmount,
+            Currency:        purchaseCurrency,
             Status:          models.PayableStatusPending,
             DueDate:         &dueDate,
             BaseID:          baseID,
@@ -397,6 +412,7 @@ func CreatePurchase(w http.ResponseWriter, r *http.Request) {
                 TotalAmount:     0,
                 PaidAmount:      0,
                 RemainingAmount: 0,
+                Currency:        purchaseCurrency,
                 Status:          models.PayableStatusPending,
                 DueDate:         due,
                 BaseID:          baseID,
@@ -416,6 +432,7 @@ func CreatePurchase(w http.ResponseWriter, r *http.Request) {
             PayableRecordID: payable.ID,
             PurchaseEntryID: p.ID,
             Amount:          req.TotalAmount,
+            Currency:        purchaseCurrency,
         }
         if err := tx.Create(&link).Error; err != nil {
             tx.Rollback()
@@ -449,6 +466,61 @@ func CreatePurchase(w http.ResponseWriter, r *http.Request) {
 	db.DB.Preload("Items").Preload("Base").Preload("Supplier").First(&p, p.ID)
 	json.NewEncoder(w).Encode(p)
 }
+
+// UploadPurchaseReceipt 上传采购票据，保存至 upload/YYYY-MM-DD/ 下，并可回写到采购记录
+func UploadPurchaseReceipt(w http.ResponseWriter, r *http.Request) {
+    claims, err := middleware.ParseJWT(r)
+    if err != nil { http.Error(w, "未授权", http.StatusUnauthorized); return }
+    role, _ := claims["role"].(string)
+    if !(role == "admin" || role == "base_agent") { http.Error(w, "无权限", http.StatusForbidden); return }
+
+    r.Body = http.MaxBytesReader(w, r.Body, 20<<20)
+    if err := r.ParseMultipartForm(25 << 20); err != nil { http.Error(w, "上传数据过大或格式错误", http.StatusBadRequest); return }
+    file, header, err := r.FormFile("file")
+    if err != nil { http.Error(w, "缺少文件", http.StatusBadRequest); return }
+    defer file.Close()
+    dateStr := strings.TrimSpace(r.FormValue("date"))
+    if dateStr == "" { dateStr = time.Now().Format("2006-01-02") }
+    if _, err := time.Parse("2006-01-02", dateStr); err != nil { http.Error(w, "date 格式应为 YYYY-MM-DD", http.StatusBadRequest); return }
+
+    baseDir := "upload"
+    if err := os.MkdirAll(baseDir, 0755); err != nil { http.Error(w, "创建上传目录失败", http.StatusInternalServerError); return }
+    cleanupOldUploadDirs(baseDir, 30)
+    dayDir := filepath.Join(baseDir, dateStr)
+    if err := os.MkdirAll(dayDir, 0755); err != nil { http.Error(w, "创建日期目录失败", http.StatusInternalServerError); return }
+
+    ext := filepath.Ext(header.Filename)
+    if len(ext) > 10 { ext = ext[:10] }
+    name := fmt.Sprintf("%d%s", time.Now().UnixNano(), ext)
+    dstPath := filepath.Join(dayDir, name)
+    dst, err := os.Create(dstPath)
+    if err != nil { http.Error(w, "保存文件失败", http.StatusInternalServerError); return }
+    defer dst.Close()
+    if _, err := io.Copy(dst, file); err != nil { http.Error(w, "写入文件失败", http.StatusInternalServerError); return }
+
+    var updated *models.PurchaseEntry
+    if pid := strings.TrimSpace(r.FormValue("purchase_id")); pid != "" {
+        if id64, err := strconv.ParseUint(pid, 10, 64); err == nil && id64 > 0 {
+            var pe models.PurchaseEntry
+            if err := db.DB.First(&pe, uint(id64)).Error; err == nil {
+                rel := "/" + filepath.ToSlash(filepath.Join(baseDir, dateStr, name))
+                _ = db.DB.Model(&pe).Update("receipt_path", rel).Error
+                updated = &pe
+            }
+        }
+    }
+    rel := "/" + filepath.ToSlash(filepath.Join(baseDir, dateStr, name))
+    w.Header().Set("Content-Type", "application/json")
+    if updated != nil {
+        json.NewEncoder(w).Encode(map[string]any{"path": rel, "purchase": updated})
+    } else {
+        json.NewEncoder(w).Encode(map[string]any{"path": rel})
+    }
+}
+
+// 复用：删除过期目录
+// 注意：清理旧目录的通用函数 cleanupOldUploadDirs 已在 expense.go 中定义并同属 handlers 包。
+// 这里复用该函数，无需重复定义。
 
 // 获取某商品某单位到基准单位的换算系数；如果未配置则返回1
 func getFactorToBaseByName(productName string, unit string) float64 {
@@ -564,8 +636,31 @@ func ListPurchase(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	q.Find(&purchases)
-	json.NewEncoder(w).Encode(purchases)
+    q.Find(&purchases)
+
+    // 补全 CreatorName（兼容历史数据为空的记录）
+    missing := make(map[uint]struct{})
+    for _, p := range purchases {
+        if p.CreatedBy != 0 && (p.CreatorName == "" || p.CreatorName == "-") {
+            missing[p.CreatedBy] = struct{}{}
+        }
+    }
+    if len(missing) > 0 {
+        ids := make([]uint, 0, len(missing))
+        for id := range missing { ids = append(ids, id) }
+        var users []models.User
+        if err := db.DB.Select("id, name").Where("id IN ?", ids).Find(&users).Error; err == nil {
+            nameMap := make(map[uint]string, len(users))
+            for _, u := range users { nameMap[u.ID] = u.Name }
+            for i := range purchases {
+                if purchases[i].CreatorName == "" {
+                    if n, ok := nameMap[purchases[i].CreatedBy]; ok { purchases[i].CreatorName = n }
+                }
+            }
+        }
+    }
+
+    json.NewEncoder(w).Encode(purchases)
 }
 
 // SupplierSuggestions 返回常用供应商（按采购使用次数排序）

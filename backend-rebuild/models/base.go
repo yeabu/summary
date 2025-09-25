@@ -9,6 +9,7 @@ type Base struct {
     Location    string    `json:"location"`
     Description string    `json:"description"`
     Status      string    `gorm:"default:active" json:"status"`
+    Currency    string    `gorm:"size:8;default:'CNY'" json:"currency"`
     CreatedBy   uint      `json:"created_by"`
     CreatedAt   time.Time `json:"created_at"`
     UpdatedAt   time.Time `json:"updated_at"`

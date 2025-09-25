@@ -68,7 +68,22 @@ func main() {
         &models.PaymentRecord{},
         &models.ExpenseCategory{},
         &models.Supplier{},
+        &models.MaterialRequisition{},
+        &models.ExchangeRate{},
     )
+
+    // Seed default exchange rates if missing
+    // LAK:CNY = 3000:1 => 1 LAK = 1/3000 CNY
+    // THB:CNY = 4.47:1 => 1 THB = 1/4.47 CNY
+    var cnt int64
+    db.DB.Model(&models.ExchangeRate{}).Where("currency = ?", "LAK").Count(&cnt)
+    if cnt == 0 {
+        db.DB.Create(&models.ExchangeRate{Currency: "LAK", RateToCNY: 1.0 / 3000.0})
+    }
+    db.DB.Model(&models.ExchangeRate{}).Where("currency = ?", "THB").Count(&cnt)
+    if cnt == 0 {
+        db.DB.Create(&models.ExchangeRate{Currency: "THB", RateToCNY: 1.0 / 4.47})
+    }
 	addr := ":8080"
 	if os.Getenv("PORT") != "" {
 		addr = ":" + os.Getenv("PORT")

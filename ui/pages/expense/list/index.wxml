@@ -1,0 +1,53 @@
+<block wx:if="{{items && items.length}}">
+  <view class="cell-group">
+    <view class="cell" wx:for="{{items}}" wx:key="id">
+      <view class="col">
+        <text class="cell-title">{{item.baseName}}</text>
+        <text class="cell-desc">{{item.categoryName}}</text>
+      </view>
+      <view class="row" style="gap: 12rpx; align-items:center;">
+        <text class="cell-value">¥{{item.amount}}</text>
+        <text class="cell-desc">{{item.date}}</text>
+        <button size="mini" bindtap="onEdit" data-id="{{item.id}}">编辑</button>
+        <button size="mini" type="warn" bindtap="onDelete" data-id="{{item.id}}">删除</button>
+      </view>
+    </view>
+  </view>
+</block>
+<block wx:else>
+  <view class="empty"><text>暂无开支数据</text></view>
+</block>
+
+<view class="fab" bindtap="openCreate" style="{{fabStyle}}">
+  <view class="fab-inner">
+    <view class="fab-bar"></view>
+    <view class="fab-bar v"></view>
+  </view>
+</view>
+
+<view class="sheet" wx:if="{{formOpen}}">
+  <view class="sheet-body">
+    <view class="row" style="justify-content: space-between; align-items:center;">
+      <text style="font-weight:600;">{{form.id ? '编辑开支' : '新增开支'}}</text>
+      <button size="mini" bindtap="closeForm">关闭</button>
+    </view>
+    <view class="cell-group">
+      <view class="cell">
+        <text class="cell-title">日期</text>
+        <picker mode="date" value="{{form.date}}" bindchange="onDate"><view class="picker">{{form.date || '选择日期'}}</view></picker>
+      </view>
+      <view class="cell">
+        <text class="cell-title">基地</text>
+        <picker mode="selector" range="{{baseNames}}" value="{{baseIndex}}" bindchange="onBase"><view class="picker">{{baseNames[baseIndex]}}</view></picker>
+      </view>
+      <view class="cell">
+        <text class="cell-title">类别</text>
+        <picker mode="selector" range="{{categoryNames}}" value="{{categoryIndex}}" bindchange="onCategory"><view class="picker">{{categoryNames[categoryIndex]}}</view></picker>
+      </view>
+      <view class="cell"><text class="cell-title">金额</text><input class="input" type="number" value="{{form.amount}}" bindinput="iAmount"/></view>
+      <view class="cell"><text class="cell-title">备注</text><input class="input" value="{{form.detail}}" bindinput="iDetail"/></view>
+    </view>
+    <view class="spacer"></view>
+    <button class="btn-primary" bindtap="save" loading="{{saving}}">保存</button>
+  </view>
+</view>

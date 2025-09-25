@@ -43,6 +43,7 @@ import {
   Warning as WarningIcon,
   FileDownload as FileDownloadIcon,
   Info as InfoIcon,
+  Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { PayableApi, PayableRecord, PayableSummaryResponse, PayableStatusText, CreatePaymentRequest } from '../api/PayableApi';
 import PaginationControl from '../components/PaginationControl';
@@ -247,6 +248,19 @@ export const PayableUnifiedView: React.FC = () => {
     loadPayables();
     loadStatistics();
     notification.showSuccess('数据已刷新');
+  };
+
+  // 删除应付款（仅admin可见入口，由后端二次校验）
+  const handleDeletePayable = async (id: number) => {
+    try {
+      if (!confirm('确定删除该应付款记录吗？此操作不可撤销')) return;
+      await payableApi.deletePayable(id);
+      notification.showSuccess('删除成功');
+      loadPayables();
+      loadStatistics();
+    } catch (e: any) {
+      notification.showError(e.message || '删除失败');
+    }
   };
 
   // 已迁移的未结货款统计逻辑删除
@@ -571,6 +585,7 @@ export const PayableUnifiedView: React.FC = () => {
                 <TableCell align="right">货款总额</TableCell>
                 <TableCell align="right">已付金额</TableCell>
                 <TableCell align="right">总欠款</TableCell>
+                <TableCell>币种</TableCell>
                 <TableCell>基地</TableCell>
                 <TableCell>状态</TableCell>
                 <TableCell>到期日期</TableCell>
@@ -591,11 +606,11 @@ export const PayableUnifiedView: React.FC = () => {
                     </Box>
                   </TableCell>
                   <TableCell align="right">
-                    {formatAmount(payable.total_amount)}
+                    {Number(payable.total_amount ?? 0).toFixed(2)}
                   </TableCell>
                   <TableCell align="right">
                     <Typography color="success.main">
-                      {formatAmount(payable.paid_amount)}
+                      {Number(payable.paid_amount ?? 0).toFixed(2)}
                     </Typography>
                   </TableCell>
                   <TableCell align="right">
@@ -603,9 +618,10 @@ export const PayableUnifiedView: React.FC = () => {
                       color={payable.remaining_amount > 0 ? 'warning.main' : 'success.main'}
                       fontWeight="bold"
                     >
-                      {formatAmount(payable.remaining_amount)}
+                      {Number(payable.remaining_amount ?? 0).toFixed(2)}
                     </Typography>
                   </TableCell>
+                  <TableCell>{String((payable as any).currency || 'CNY').toUpperCase()}</TableCell>
                   <TableCell>{payable.base?.name || '-'}</TableCell>
                   <TableCell>
                     <Chip 
@@ -646,6 +662,13 @@ export const PayableUnifiedView: React.FC = () => {
                         </IconButton>
                       </Tooltip>
                     )}
+                    {/* 删除（admin） */}
+                    {/** 入口简单显示，由后端校验权限；如需前端基于角色隐藏，可在全局store获取user.role判断 **/}
+                    <Tooltip title="删除">
+                      <IconButton size="small" color="error" onClick={() => handleDeletePayable(payable.id)}>
+                        <DeleteIcon />
+                      </IconButton>
+                    </Tooltip>
                     {/* 编辑状态功能已移除 */}
                   </TableCell>
                 </TableRow>

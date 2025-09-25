@@ -21,6 +21,7 @@ import SupplierPieStatsView from '../views/SupplierPieStatsView';
 import PayableTimelineView from '../views/PayableTimelineView';
 import { ADMIN_ROLE } from '../utils/roles';
 import ProductManagementView from '../views/ProductManagementView';
+import InventoryManagementView from '../views/InventoryManagementView';
 
 /**
  * 项目所有页面路由配置，含权限校验。可根据业务扩展。
@@ -41,6 +42,8 @@ const App = () => {
             <Route path="profile" element={<ProfileView />} />
             {/* 基地日常开支（所有登录用户，有录入/查看权限） */}
             <Route path="expense/list" element={<BaseExpenseListView />} />
+            {/* 库存管理与物资申领 */}
+            <Route path="inventory/management" element={<InventoryManagementView />} />
             {/* 应付款管理（合并了原来的应付款管理和欠款统计功能） */}
             <Route path="payable/list" element={<PayableUnifiedView />} />
             <Route path="payable/stats" element={<PayableUnifiedView />} />
@@ -56,8 +59,11 @@ const App = () => {
               <Route path="purchase/list" element={<PurchaseListView />} />
               <Route path="base/management" element={<BaseManagementView />} />
               <Route path="base/section-management" element={<BaseSectionManagementView />} />
-              <Route path="user/management" element={<UserManagementView />} />
               <Route path="expense/category-management" element={<ExpenseCategoryManagementView />} />
+            </Route>
+            {/* 人员管理：管理员与基地代理可访问 */}
+            <Route element={<ProtectedRoute roles={[ADMIN_ROLE, 'base_agent']} />}>
+              <Route path="user/management" element={<UserManagementView />} />
             </Route>
           </Route>
         </Route>

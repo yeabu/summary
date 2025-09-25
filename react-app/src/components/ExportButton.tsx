@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Button,
   Dialog,
@@ -52,7 +52,7 @@ const ExportButton: React.FC<ExportButtonProps> = ({
   const notification = useNotification();
   
   // 创建 ApiClient 实例
-  const apiClient = new ApiClient();
+  const apiClient = useMemo(() => new ApiClient(), []);
 
   // 字段配置
   const fieldConfigs = {

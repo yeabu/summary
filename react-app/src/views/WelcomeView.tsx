@@ -4,7 +4,7 @@
  * 提供系统功能导航和快速访问入口
  * 根据用户角色显示不同的功能模块
  */
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Typography, 
@@ -15,7 +15,15 @@ import {
   CardContent, 
   CardActionArea,
   Avatar,
-  Chip
+  Chip,
+  Paper,
+  Table,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableBody,
+  Skeleton,
+  Divider
 } from '@mui/material';
 import {
   Receipt as ExpenseIcon,
@@ -23,9 +31,12 @@ import {
   BarChart as StatsIcon,
   Person as ProfileIcon,
   Business as BaseIcon,
-  Group as UserIcon
+  Group as UserIcon,
+  Inventory2 as InventoryIcon,
+  CurrencyExchange as CurrencyExchangeIcon
 } from '@mui/icons-material';
 import useAuthStore from '@/auth/AuthStore';
+import { getValidAccessTokenOrRefresh } from '@/utils/authToken';
 
 /**
  * 系统主页 - 功能导航
@@ -36,6 +47,35 @@ const WelcomeView = () => {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
   const isAdmin = user?.role === 'admin';
+  const [rates, setRates] = useState<Array<{ currency:string; rate_to_cny:number; updated_at?: string }>>([]);
+  const [rateLoading, setRateLoading] = useState(false);
+  const [rateError, setRateError] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setRateLoading(true);
+        setRateError('');
+        const apiUrl = import.meta.env.VITE_API_URL;
+        const token = await getValidAccessTokenOrRefresh();
+        const res = await fetch(`${apiUrl}/api/rate/list`, { headers: { Authorization: token ? `Bearer ${token}` : '' } });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        setRates(Array.isArray(data) ? data : []);
+      } catch (e:any) {
+        setRateError(e?.message || '汇率加载失败');
+        setRates([]);
+      } finally {
+        setRateLoading(false);
+      }
+    })();
+  }, []);
+
+  const currencyCn = (c?: string) => c === 'LAK' ? '老挝币' : c === 'THB' ? '泰铢' : c === 'CNY' ? '人民币' : (c || '');
+  const fmt = (n: number, d = 4) => {
+    if (!isFinite(n)) return '0';
+    return n.toFixed(d);
+  };
 
   const menuItems = [
     {
@@ -55,12 +95,12 @@ const WelcomeView = () => {
       available: isAdmin
     },
     {
-      title: '统计分析',
-      description: '查看开支、采购与欠款分析',
-      icon: <StatsIcon sx={{ fontSize: 40 }} />,
-      path: '/expense/stats',
+      title: '库存管理',
+      description: '库存管理与物资申领',
+      icon: <InventoryIcon sx={{ fontSize: 40 }} />,
+      path: '/inventory/management',
       color: '#ff9800',
-      available: isAdmin
+      available: isAdmin || user?.role === 'base_agent'
     },
     {
       title: '基地管理',
@@ -99,7 +139,7 @@ const WelcomeView = () => {
         <Typography variant="h6" align="center" color="text.secondary" gutterBottom>
           欢迎回来，{user?.name}！
         </Typography>
-        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1, gap: 1 }}>
           <Chip 
             label={user?.role === 'admin' ? '管理员' : 
                    user?.role === 'factory_manager' ? '厂长' :
@@ -112,10 +152,68 @@ const WelcomeView = () => {
               label={`基地: ${user.base}`} 
               color="default"
               variant="outlined"
-              sx={{ ml: 1 }}
+              sx={{}}
             />
           )}
         </Box>
+        {/* 汇率换算卡片（优化样式） */}
+        <Paper elevation={0} sx={{ p: 2, borderRadius: 2, bgcolor: 'background.default', border: '1px solid', borderColor: 'divider', maxWidth: 760, mx: 'auto', mb: 3 }}>
+          <Box sx={{ display:'flex', alignItems:'center', justifyContent:'space-between', mb: 1 }}>
+            <Box sx={{ display:'flex', alignItems:'center', gap: 1 }}>
+              <CurrencyExchangeIcon color="primary" />
+              <Typography variant="subtitle1">汇率换算</Typography>
+            </Box>
+            <Typography variant="caption" color="text.secondary">以人民币 CNY 为基准，仅供参考</Typography>
+          </Box>
+          <Divider sx={{ mb: 1 }} />
+          {rateError && (
+            <Typography variant="body2" color="error" sx={{ mb: 1 }}>{rateError}</Typography>
+          )}
+          {rateLoading ? (
+            <Box>
+              {[...Array(3)].map((_,i)=> (
+                <Box key={i} sx={{ display:'flex', alignItems:'center', gap: 2, py: 0.5 }}>
+                  <Skeleton variant="text" width={160} height={24} />
+                  <Skeleton variant="text" width={200} height={24} />
+                  <Skeleton variant="text" width={220} height={24} />
+                </Box>
+              ))}
+            </Box>
+          ) : (
+            <Table size="small" sx={{ '& td, & th': { whiteSpace: 'nowrap' } }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>币种</TableCell>
+                  <TableCell>1 单位 ≈ 人民币 (CNY)</TableCell>
+                  <TableCell>更新时间</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {rates
+                  .filter(r => (r.currency || '').toUpperCase() !== 'CNY')
+                  .map(r => {
+                    const c = (r.currency || '').toUpperCase();
+                    const rate = Number(r.rate_to_cny || 0);
+                    const updated = r.updated_at ? new Date(r.updated_at) : null;
+                    return (
+                      <TableRow key={c}>
+                        <TableCell>{currencyCn(c)} ({c})</TableCell>
+                        <TableCell>{fmt(rate, 4)}</TableCell>
+                        <TableCell>{updated ? updated.toLocaleString() : '-'}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                {rates.filter(r => (r.currency || '').toUpperCase() !== 'CNY').length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={3}>
+                      <Typography variant="body2" color="text.secondary">暂无汇率数据</Typography>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </Paper>
       </Box>
 
       <Grid container spacing={3}>
@@ -159,7 +257,14 @@ const WelcomeView = () => {
         ))}
       </Grid>
 
-      <Box sx={{ mt: 4, p: 3, bgcolor: 'background.paper', borderRadius: 2 }}>
+      {/* 提示：老挝金额单位说明（移动至系统功能说明上方） */}
+      <Paper elevation={0} sx={{ mt: 4, mb: 2, p: 1.5, borderRadius: 2, bgcolor: 'background.default', border: '1px dashed', borderColor: 'divider', maxWidth: 720, mx: 'auto' }}>
+        <Typography variant="body2" color="text.secondary">
+          提示：老挝币种LAK金额默认以“万”为单位显示。例如输入/显示 20 表示 20 万 LAK。
+        </Typography>
+      </Paper>
+
+      <Box sx={{ p: 3, bgcolor: 'background.paper', borderRadius: 2 }}>
         <Typography variant="h6" gutterBottom>
           系统功能说明
         </Typography>

@@ -2,17 +2,20 @@ import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import dayjs from 'dayjs';
 import { BaseExpense, Purchase, ExpenseStats } from '@/api/AppDtos';
+import { getCurrency, formatCurrency } from '@/utils/currency';
 
 // 导出基础开支记录
 export const exportExpenses = (data: BaseExpense[], filename?: string) => {
+  const curr = getCurrency();
+  const amountKey = `金额(${curr})`;
   const worksheet = XLSX.utils.json_to_sheet(
     data.map(item => ({
       '日期': dayjs(item.date).format('YYYY-MM-DD'),
       '类别': item.category,
-      '金额': item.amount,
+      [amountKey]: formatCurrency(item.amount || 0, curr),
       '所属基地': item.base,
       '详情': item.detail || '',
-      '录入人': item.creator_name || '',
+      '录入人': (item as any).creator?.name || item.creator_name || '',
       '创建时间': item.created_at ? dayjs(item.created_at).format('YYYY-MM-DD HH:mm:ss') : ''
     }))
   );
@@ -29,16 +32,20 @@ export const exportExpenses = (data: BaseExpense[], filename?: string) => {
 
 // 导出采购记录
 export const exportPurchases = (data: Purchase[], filename?: string) => {
+  const curr = getCurrency();
+  const totalKey = `总金额(${curr})`;
+  const priceKey = `单价(${curr})`;
+  const amountKey = `小计(${curr})`;
   const worksheet = XLSX.utils.json_to_sheet(
     data.map(item => ({
       '采购日期': dayjs(item.purchase_date).format('YYYY-MM-DD'),
       '供应商': item.supplier,
       '订单号': item.order_number,
-      '总金额': item.total_amount,
+      [totalKey]: formatCurrency(item.total_amount || 0, curr),
       '收货人': item.receiver,
       '商品数量': item.items?.length || 0,
       '备注': item.notes || '',
-      '录入人': item.creator_name || '',
+      '录入人': (item as any).creator?.name || item.creator_name || '',
       '创建时间': item.created_at ? dayjs(item.created_at).format('YYYY-MM-DD HH:mm:ss') : ''
     }))
   );
@@ -58,8 +65,8 @@ export const exportPurchases = (data: Purchase[], filename?: string) => {
             '供应商': purchase.supplier,
             '商品名称': item.product_name,
             '数量': item.quantity,
-            '单价': item.unit_price,
-            '小计': item.amount,
+            [priceKey]: formatCurrency(item.unit_price || 0, curr),
+            [amountKey]: formatCurrency(item.amount || 0, curr),
             '收货人': purchase.receiver
           });
         });
@@ -79,12 +86,14 @@ export const exportPurchases = (data: Purchase[], filename?: string) => {
 
 // 导出统计数据
 export const exportStats = (data: ExpenseStats[], filename?: string) => {
+  const curr = getCurrency();
+  const totalKey = `总金额(${curr})`;
   const worksheet = XLSX.utils.json_to_sheet(
     data.map(item => ({
       '基地': item.base,
       '类别': item.category,
       '月份': item.month,
-      '总金额': item.total
+      [totalKey]: formatCurrency(item.total || 0, curr)
     }))
   );
 
@@ -97,19 +106,19 @@ export const exportStats = (data: ExpenseStats[], filename?: string) => {
   let totalAmount = 0;
 
   data.forEach(item => {
-    baseTotals[item.base] = (baseTotals[item.base] || 0) + item.total;
-    categoryTotals[item.category] = (categoryTotals[item.category] || 0) + item.total;
-    totalAmount += item.total;
+    baseTotals[item.base] = (baseTotals[item.base] || 0) + (item.total || 0);
+    categoryTotals[item.category] = (categoryTotals[item.category] || 0) + (item.total || 0);
+    totalAmount += (item.total || 0);
   });
 
   const summaryData = [
-    { '项目': '总计', '金额': totalAmount },
+    { '项目': '总计', ['金额('+curr+')']: formatCurrency(totalAmount, curr) },
     { '项目': '', '金额': '' },
     { '项目': '按基地统计', '金额': '' },
-    ...Object.entries(baseTotals).map(([base, total]) => ({ '项目': base, '金额': total })),
+    ...Object.entries(baseTotals).map(([base, total]) => ({ '项目': base, ['金额('+curr+')']: formatCurrency(total, curr) })),
     { '项目': '', '金额': '' },
     { '项目': '按类别统计', '金额': '' },
-    ...Object.entries(categoryTotals).map(([category, total]) => ({ '项目': category, '金额': total }))
+    ...Object.entries(categoryTotals).map(([category, total]) => ({ '项目': category, ['金额('+curr+')']: formatCurrency(total, curr) }))
   ];
 
   const summaryWorksheet = XLSX.utils.json_to_sheet(summaryData);

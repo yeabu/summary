@@ -79,6 +79,9 @@ func SetupRouter() *http.ServeMux {
     // Analytics
     mux.HandleFunc("/api/analytics/summary", method("GET", middleware.AuthMiddleware(handlers.AnalyticsSummary, "admin", "base_agent")))
 
+    // Exchange rates
+    mux.HandleFunc("/api/rate/list", method("GET", middleware.AuthMiddleware(handlers.ExchangeRateList, "admin", "base_agent", "captain")))
+
     // Admin jobs
     mux.HandleFunc("/api/admin/refresh-monthly", method("POST", middleware.AuthMiddleware(handlers.RefreshMonthlyMaterialized, "admin")))
     mux.HandleFunc("/api/admin/refresh-monthly-range", method("POST", middleware.AuthMiddleware(handlers.RefreshMonthlyRange, "admin")))

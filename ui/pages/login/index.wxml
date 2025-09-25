@@ -1,0 +1,18 @@
+<view class="login-page">
+  <view class="brand">
+    <image class="logo" src="/assets/jh.png" mode="aspectFit"></image>
+    <text class="title">佳慧记账</text>
+  </view>
+  <view class="form card">
+    <view class="field">
+      <text class="label">用户名</text>
+      <input class="input" type="text" placeholder="请输入用户名" value="{{name}}" bindinput="onName" confirm-type="next"></input>
+    </view>
+    <view class="field">
+      <text class="label">密码</text>
+      <input class="input" password="true" placeholder="请输入密码" value="{{pwd}}" bindinput="onPwd" confirm-type="done"></input>
+    </view>
+    <button type="primary" class="btn-primary" bindtap="login" loading="{{loading}}" disabled="{{loading}}">登录</button>
+  </view>
+  <view class="footer muted">© {{year}} Banana</view>
+</view>

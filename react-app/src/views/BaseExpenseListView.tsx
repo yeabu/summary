@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ApiClient } from "@/api/ApiClient";
-import { Paper, Box, Button, Table, TableHead, TableRow, TableCell, TableBody, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Typography, Alert, Checkbox, IconButton, Grid, MenuItem } from "@mui/material";
+import { Paper, Box, Button, Table, TableHead, TableRow, TableCell, TableBody, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Typography, Alert, Checkbox, IconButton, Grid, MenuItem, Tooltip } from "@mui/material";
 import PageHeader from '@/components/PageHeader';
 import EmptyState from '@/components/EmptyState';
 import CloseIcon from '@mui/icons-material/Close';
@@ -14,7 +14,11 @@ import { useNotification } from "@/components/NotificationProvider";
 import BatchOperations, { BatchAction } from "@/components/BatchOperations";
 import { BaseExpense, FilterOptions, PaginationResponse } from "@/api/AppDtos";
 import dayjs from "dayjs";
-import { Delete as DeleteIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon, Edit as EditIcon, ReceiptLong as ReceiptIcon, CloudUpload as UploadIcon, OpenInNew as OpenInNewIcon, PhotoCamera as CameraIcon } from '@mui/icons-material';
+import CameraCaptureDialog from '@/components/CameraCaptureDialog';
+import ImageEditDialog from '@/components/ImageEditDialog';
+import ConfirmDialog from '@/components/ConfirmDialog';
+// 金额/币种展示：列表中仅显示纯数字和币种英文代码
 
 export default function BaseExpenseListView() {
   const notification = useNotification();
@@ -41,9 +45,57 @@ export default function BaseExpenseListView() {
   const [bases, setBases] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [defaultBaseId, setDefaultBaseId] = useState<number | ''>('');
+  // 单条删除确认
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [toDeleteId, setToDeleteId] = useState<number | null>(null);
+  // 票据查看/上传
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [receiptExpense, setReceiptExpense] = useState<BaseExpense | null>(null);
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
+  const [uploadErr, setUploadErr] = useState<string>('');
+  const isMobile = useMemo(() => /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent), []);
+  const cameraSupported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editBlob, setEditBlob] = useState<Blob | null>(null);
+
+  // 压缩图片到 <= 2MB，最长边限制 2000px
+  const compressImage = (file: File, maxBytes = 2 * 1024 * 1024, maxDim = 2000): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      if (!file.type.startsWith('image/')) {
+        reject(new Error('只支持图片文件'));
+        return;
+      }
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let { width, height } = img as any;
+        const scale = Math.min(1, maxDim / Math.max(width, height));
+        width = Math.round(width * scale); height = Math.round(height * scale);
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { URL.revokeObjectURL(url); reject(new Error('压缩失败')); return; }
+        ctx.drawImage(img, 0, 0, width, height);
+        const tryQualities = [0.92, 0.85, 0.8, 0.7, 0.6];
+        (function tryNext(i: number){
+          canvas.toBlob((blob) => {
+            if (!blob) { URL.revokeObjectURL(url); reject(new Error('压缩失败')); return; }
+            if (blob.size <= maxBytes || i === tryQualities.length - 1) {
+              const out = new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' });
+              URL.revokeObjectURL(url);
+              resolve(out);
+            } else { tryNext(i + 1); }
+          }, 'image/jpeg', tryQualities[i]);
+        })(0);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('读取图片失败')); };
+      img.src = url;
+    });
+  };
   
   // 创建 ApiClient 实例
-  const apiClient = new ApiClient();
+  const apiClient = useMemo(() => new ApiClient(), []);
   
   const batchActions: BatchAction[] = [
     {
@@ -97,12 +149,14 @@ export default function BaseExpenseListView() {
         category: item.category,  // 保持category对象
         category_id: item.category_id,  // 添加category_id
         amount: item.amount,
+        currency: item.currency || 'CNY',
         base: item.base || { id: 0, name: '', code: '' }, // 确保base字段不为undefined
         detail: item.detail,
         created_by: item.created_by,
         creator_name: item.creator_name,
         created_at: item.created_at,
-        updated_at: item.updated_at
+        updated_at: item.updated_at,
+        receipt_path: item.receipt_path,
       }));
       
       setList(baseExpenses);
@@ -197,6 +251,49 @@ export default function BaseExpenseListView() {
   
   const getItemLabel = (item: BaseExpense) => {
     return `${dayjs(item.date).format('MM-DD')} ${item.category?.name || '未知类别'} ¥${item.amount?.toFixed(2)}`;
+  };
+
+  const askDelete = (id: number) => {
+    setToDeleteId(id);
+    setConfirmOpen(true);
+  };
+
+  const openReceipt = (exp: BaseExpense) => {
+    setReceiptExpense(exp);
+    setUploadErr('');
+    setReceiptOpen(true);
+  };
+
+  const handleUploadReceipt = async (file: File) => {
+    if (!receiptExpense) return;
+    try {
+      setUploadingReceipt(true);
+      setUploadErr('');
+      const resp = await apiClient.uploadExpenseReceipt({ expense_id: receiptExpense.id!, date: receiptExpense.date?.slice(0,10), file });
+      // 更新列表中的该条记录
+      const newPath = resp.path;
+      setList(prev => prev.map(it => it.id === receiptExpense.id ? { ...it, receipt_path: newPath } : it));
+      setReceiptExpense(prev => prev ? { ...prev, receipt_path: newPath } as any : prev);
+      notification.showSuccess('票据已上传');
+    } catch (e:any) {
+      setUploadErr(e.message || '上传失败');
+      notification.showError(e.message || '上传失败');
+    } finally {
+      setUploadingReceipt(false);
+    }
+  };
+
+  const doDelete = async () => {
+    if (!toDeleteId) return;
+    try {
+      await apiClient.deleteExpense(toDeleteId);
+      notification.showSuccess('删除成功');
+      setConfirmOpen(false);
+      setToDeleteId(null);
+      load(filters, pagination.page, pagination.page_size);
+    } catch (e:any) {
+      notification.showError(e?.message || '删除失败');
+    }
   };
 
   useEffect(() => { load(); }, []);
@@ -312,7 +409,7 @@ export default function BaseExpenseListView() {
 
       <Paper sx={{ p: 3 }}>
         {loading ? (
-          <TableSkeleton rows={5} columns={8} />
+          <TableSkeleton rows={5} columns={9} />
         ) : list.length === 0 ? (
           <EmptyState title="暂无开支记录" description="点击右上角“新增开支”或“批量添加”按钮录入数据" />
         ) : (
@@ -325,6 +422,7 @@ export default function BaseExpenseListView() {
                 <TableCell>日期</TableCell>
                 <TableCell>类别</TableCell>
                 <TableCell>金额</TableCell>
+                <TableCell>币种</TableCell>
                 <TableCell>所属基地</TableCell>
                 <TableCell>录入人</TableCell>
                 <TableCell>备注</TableCell>
@@ -345,18 +443,27 @@ export default function BaseExpenseListView() {
                     </TableCell>
                     <TableCell>{dayjs(row.date).format("YYYY-MM-DD")}</TableCell>
                     <TableCell>{row.category?.name || '未知类别'}</TableCell>
-                    <TableCell>¥{row.amount?.toFixed(2)}</TableCell>
+                  <TableCell>{Number(row.amount ?? 0).toFixed(2)}</TableCell>
+                    <TableCell>{String(((row as any).currency || 'CNY')).toUpperCase()}</TableCell>
                     <TableCell>{row.base?.name || '-'}</TableCell>
-                    <TableCell>{row.creator_name || '-'}</TableCell>
+                    <TableCell>{(row as any).creator?.name || row.creator_name || '-'}</TableCell>
                     <TableCell>{row.detail || '-'}</TableCell>
                     <TableCell>
-                      <Button 
-                        variant="text" 
-                        onClick={() => setEdit(row)}
-                        size="small"
-                      >
-                        编辑
-                      </Button>
+                      <Tooltip title="编辑">
+                        <IconButton size="small" onClick={() => setEdit(row)}>
+                          <EditIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="删除">
+                        <IconButton size="small" color="error" onClick={() => row.id && askDelete(row.id)}>
+                          <DeleteIcon />
+                        </IconButton>
+                    </Tooltip>
+                      <Tooltip title="查看票据">
+                        <IconButton size="small" onClick={() => openReceipt(row)}>
+                          <ReceiptIcon />
+                        </IconButton>
+                      </Tooltip>
                     </TableCell>
                   </TableRow>
                 );
@@ -380,7 +487,7 @@ export default function BaseExpenseListView() {
           <ExpenseBatchCreateForm onClose={() => setCreateOpen(false)} onCreated={load} />
         </DialogContent>
       </Dialog>
-
+      
       {/* 编辑（单条） */}
       <Dialog open={!!edit} onClose={() => setEdit(null)} maxWidth="md" fullWidth>
         <Box p={3} sx={{ position: 'relative' }}>
@@ -393,11 +500,13 @@ export default function BaseExpenseListView() {
           </IconButton>
           <BaseExpenseForm
             initial={edit ? {
+              id: edit.id,
               date: edit.date,
               category_id: edit.category_id,  // 修改为category_id
               amount: edit.amount,
               detail: edit.detail,
-              base: edit.base
+              base: edit.base,
+              receipt_path: (edit as any).receipt_path
             } : undefined}
             submitting={submitting}
             onCancel={() => setEdit(null)}
@@ -449,6 +558,69 @@ export default function BaseExpenseListView() {
           />
         </Box>
       </Dialog>
+      <ConfirmDialog
+        open={confirmOpen}
+        onClose={() => { setConfirmOpen(false); setToDeleteId(null); }}
+        onConfirm={doDelete}
+        title="确认删除开支记录"
+        content="此操作不可撤销，确定要删除该开支记录吗？"
+        confirmText="删除"
+        confirmColor="error"
+      />
+
+      {/* 票据查看/上传对话框 */}
+      <Dialog open={receiptOpen} onClose={() => setReceiptOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>查看票据</DialogTitle>
+        <DialogContent>
+          {receiptExpense?.receipt_path ? (
+            <Box sx={{ mb: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <OpenInNewIcon fontSize="small" />
+                <a href={`${import.meta.env.VITE_API_URL}${receiptExpense.receipt_path}`} target="_blank" rel="noreferrer">在新窗口打开</a>
+              </Box>
+              <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
+                <img src={`${import.meta.env.VITE_API_URL}${receiptExpense.receipt_path}`} alt="票据" style={{ width: '100%', display: 'block' }} />
+              </Box>
+            </Box>
+          ) : (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>暂无票据</Typography>
+          )}
+          {uploadErr && <Alert severity="error" sx={{ mb: 1 }}>{uploadErr}</Alert>}
+          <Box sx={{ display:'flex', gap: 1, flexWrap:'wrap' }}>
+            <Button variant="outlined" startIcon={<UploadIcon />} component="label" disabled={uploadingReceipt}>
+              {receiptExpense?.receipt_path ? '更换票据' : '上传票据'}
+              <input type="file" accept="image/*" hidden onChange={async (e)=>{ const f=e.target.files?.[0]; e.currentTarget.value=''; if(!f) return; if(!f.type.startsWith('image/')) { setUploadErr('只支持图片格式'); return; } setEditBlob(f); setEditOpen(true); }} />
+            </Button>
+            {cameraSupported && (
+              <Button variant="outlined" startIcon={<CameraIcon />} disabled={uploadingReceipt} onClick={()=> setCameraOpen(true)}>
+                拍照上传
+              </Button>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={()=>setReceiptOpen(false)}>关闭</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 高级拍照对话框（getUserMedia） */}
+      <CameraCaptureDialog
+        open={cameraOpen}
+        onClose={()=> setCameraOpen(false)}
+        instant
+        onCapture={async (blob)=>{ setEditBlob(blob); setEditOpen(true); }}
+      />
+
+      {/* 简易图片编辑（旋转/裁剪） */}
+      <ImageEditDialog
+        open={editOpen}
+        file={editBlob}
+        onClose={()=> setEditOpen(false)}
+        onDone={async (blob)=>{
+          try { const file = new File([blob], `receipt_${Date.now()}.jpg`, { type: blob.type || 'image/jpeg' }); const cf = await compressImage(file); handleUploadReceipt(cf); }
+          catch(err:any){ setUploadErr(err?.message || '处理失败'); }
+        }}
+      />
     </Box>
   );
 }

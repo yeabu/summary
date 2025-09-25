@@ -32,6 +32,7 @@ import {
   Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import { ApiClient } from '@/api/ApiClient';
+import { useMemo } from 'react';
 import { useNotification } from '@/components/NotificationProvider';
 import { Base } from '@/api/AppDtos';
 
@@ -53,7 +54,7 @@ interface PurchaseForm {
 }
 
 export const PurchaseCreateView: React.FC = () => {
-  const apiClient = new ApiClient();
+  const apiClient = useMemo(() => new ApiClient(), []);
   const notification = useNotification();
 
   // 状态管理

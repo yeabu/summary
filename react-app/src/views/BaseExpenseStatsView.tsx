@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { 
   Paper, 
   Typography, 
@@ -43,7 +43,7 @@ export default function BaseExpenseStatsView() {
   const [viewMode, setViewMode] = useState<'table' | 'charts'>('charts');
   
   // 创建 ApiClient 实例
-  const apiClient = new ApiClient();
+  const apiClient = useMemo(() => new ApiClient(), []);
 
   const loadStats = async () => {
     setLoading(true);
@@ -241,7 +241,7 @@ export default function BaseExpenseStatsView() {
             <TableCell>基地</TableCell>
             <TableCell>类别</TableCell>
             <TableCell>月份</TableCell>
-            <TableCell align="right">总额（元）</TableCell>
+              <TableCell align="right">总额</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -250,7 +250,7 @@ export default function BaseExpenseStatsView() {
               <TableCell>{item.base}</TableCell>
               <TableCell>{item.category}</TableCell>
               <TableCell>{item.month}</TableCell>
-              <TableCell align="right">￥{item.total?.toFixed(2)}</TableCell>
+              <TableCell align="right">{(window as any).formatCurrency ? (window as any).formatCurrency(item.total || 0, (item as any).currency || 'CNY') : `${(item as any).currency || 'CNY'} ${(item.total || 0).toFixed(2)}`}</TableCell>
             </TableRow>
           )}
         </TableBody>

@@ -19,6 +19,7 @@ type productCreateReq struct {
     BaseUnit   string   `json:"base_unit"`
     Spec       string   `json:"spec"`
     UnitPrice  float64  `json:"unit_price"`
+    Currency   string   `json:"currency"`
     SupplierID *uint    `json:"supplier_id,omitempty"`
     Status     string   `json:"status"`
 }
@@ -28,6 +29,7 @@ type productUpdateReq struct {
     BaseUnit   *string  `json:"base_unit,omitempty"`
     Spec       *string  `json:"spec,omitempty"`
     UnitPrice  *float64 `json:"unit_price,omitempty"`
+    Currency   *string  `json:"currency,omitempty"`
     SupplierID *uint    `json:"supplier_id,omitempty"`
     Status     *string  `json:"status,omitempty"`
 }
@@ -76,6 +78,7 @@ func CreateProduct(w http.ResponseWriter, r *http.Request) {
         BaseUnit:   strings.TrimSpace(req.BaseUnit),
         Spec:       strings.TrimSpace(req.Spec),
         UnitPrice:  req.UnitPrice,
+        Currency:   func() string { if strings.TrimSpace(req.Currency) != "" { return strings.ToUpper(strings.TrimSpace(req.Currency)) }; return "CNY" }(),
         SupplierID: req.SupplierID,
         Status:     "active",
         CreatedAt:  time.Now(),
@@ -100,6 +103,7 @@ func UpdateProduct(w http.ResponseWriter, r *http.Request) {
     if req.BaseUnit != nil { p.BaseUnit = strings.TrimSpace(*req.BaseUnit) }
     if req.Spec != nil { p.Spec = strings.TrimSpace(*req.Spec) }
     if req.UnitPrice != nil { p.UnitPrice = *req.UnitPrice }
+    if req.Currency != nil && strings.TrimSpace(*req.Currency) != "" { p.Currency = strings.ToUpper(strings.TrimSpace(*req.Currency)) }
     if req.SupplierID != nil { p.SupplierID = req.SupplierID }
     if req.Status != nil && *req.Status != "" { p.Status = *req.Status }
     p.UpdatedAt = time.Now()
@@ -113,6 +117,22 @@ func DeleteProduct(w http.ResponseWriter, r *http.Request) {
     if role, _ := claims["role"].(string); role != "admin" { http.Error(w, "无权限", http.StatusForbidden); return }
     idStr := r.URL.Query().Get("id"); id, _ := strconv.Atoi(idStr)
     if id <= 0 { http.Error(w, "无效ID", http.StatusBadRequest); return }
+    // 先检查是否被物资申领引用
+    var mrCount int64
+    if err := db.DB.Model(&models.MaterialRequisition{}).Where("product_id = ?", id).Count(&mrCount).Error; err == nil && mrCount > 0 {
+        http.Error(w, "该商品存在物资申领记录，无法删除", http.StatusConflict)
+        return
+    }
+    // 清理关联的单位规格与采购参数，避免外键阻塞
+    if err := db.DB.Where("product_id = ?", id).Delete(&models.ProductUnitSpec{}).Error; err != nil {
+        http.Error(w, "清理商品单位规格失败", http.StatusInternalServerError)
+        return
+    }
+    if err := db.DB.Where("product_id = ?", id).Delete(&models.ProductPurchaseParam{}).Error; err != nil {
+        http.Error(w, "清理商品采购参数失败", http.StatusInternalServerError)
+        return
+    }
+    // 删除商品
     if err := db.DB.Delete(&models.Product{}, id).Error; err != nil { http.Error(w, "删除失败", http.StatusInternalServerError); return }
     w.Header().Set("Content-Type", "application/json"); json.NewEncoder(w).Encode(map[string]string{"message":"ok"})
 }
@@ -135,7 +155,7 @@ func ExportProductCSV(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "text/csv; charset=utf-8")
     w.Header().Set("Content-Disposition", "attachment; filename=products.csv")
     cw := csv.NewWriter(w)
-    _ = cw.Write([]string{"id","name","spec","base_unit","unit_price","supplier","status"})
+    _ = cw.Write([]string{"id","name","spec","base_unit","unit_price","currency","supplier","status"})
     for _, p := range items {
         supName := ""
         if p.Supplier != nil { supName = p.Supplier.Name }
@@ -145,6 +165,7 @@ func ExportProductCSV(w http.ResponseWriter, r *http.Request) {
             p.Spec,
             p.BaseUnit,
             strconv.FormatFloat(p.UnitPrice, 'f', 2, 64),
+            p.Currency,
             supName,
             p.Status,
         })
@@ -157,8 +178,8 @@ func DownloadProductCSVTemplate(w http.ResponseWriter, r *http.Request) {
     if _, err := middleware.ParseJWT(r); err != nil { http.Error(w, "未授权", http.StatusUnauthorized); return }
     w.Header().Set("Content-Type", "text/csv; charset=utf-8")
     w.Header().Set("Content-Disposition", "attachment; filename=product_import_template.csv")
-    w.Write([]byte("name,spec,base_unit,unit_price,supplier_name\n"))
-    w.Write([]byte("矿泉水,500ml,瓶,2.50,农夫山泉\n"))
+    w.Write([]byte("name,spec,base_unit,unit_price,currency,supplier_name\n"))
+    w.Write([]byte("矿泉水,500ml,瓶,2.50,CNY,农夫山泉\n"))
 }
 
 // ImportProductCSV CSV导入商品（支持supplier_id或supplier_name）
@@ -179,7 +200,7 @@ func ImportProductCSV(w http.ResponseWriter, r *http.Request) {
     for i, h := range header {
         idx[strings.ToLower(strings.TrimSpace(h))] = i
     }
-    // 支持列：name,spec,base_unit,unit_price,supplier_id,supplier_name
+        // 支持列：name,spec,base_unit,unit_price,currency,supplier_id,supplier_name
     created := 0
     updated := 0
     for {
@@ -195,6 +216,7 @@ func ImportProductCSV(w http.ResponseWriter, r *http.Request) {
         spec := get("spec")
         baseUnit := get("base_unit")
         unitPriceStr := get("unit_price")
+        currency := strings.ToUpper(strings.TrimSpace(get("currency")))
         var unitPrice float64
         if unitPriceStr != "" { if v, e := strconv.ParseFloat(unitPriceStr, 64); e == nil { unitPrice = v } }
         // 供应商解析
@@ -217,6 +239,7 @@ func ImportProductCSV(w http.ResponseWriter, r *http.Request) {
             if baseUnit != "" { p.BaseUnit = baseUnit }
             if unitPrice > 0 { p.UnitPrice = unitPrice }
             if supplierID != nil { p.SupplierID = supplierID }
+            if currency != "" { p.Currency = currency }
             p.UpdatedAt = time.Now()
             _ = db.DB.Save(&p).Error
             updated++
@@ -226,6 +249,7 @@ func ImportProductCSV(w http.ResponseWriter, r *http.Request) {
                 BaseUnit: baseUnit,
                 Spec: spec,
                 UnitPrice: unitPrice,
+                Currency: func() string { if currency != "" { return currency }; return "CNY" }(),
                 SupplierID: supplierID,
                 Status: "active",
                 CreatedAt: time.Now(),

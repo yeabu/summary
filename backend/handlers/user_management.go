@@ -53,19 +53,17 @@ type UserResponse struct {
 
 // CreateUser 创建用户
 func CreateUser(w http.ResponseWriter, r *http.Request) {
-	// JWT权限验证
-	claims, err := middleware.ParseJWT(r)
-	if err != nil {
-		http.Error(w, "token无效", http.StatusUnauthorized)
-		return
-	}
-
-	// 只有管理员可以创建用户
-	userRole := claims["role"].(string)
-	if userRole != "admin" {
-		http.Error(w, "没有权限创建用户", http.StatusForbidden)
-		return
-	}
+    // JWT权限验证
+    claims, err := middleware.ParseJWT(r)
+    if err != nil {
+        http.Error(w, "token无效", http.StatusUnauthorized)
+        return
+    }
+    // 允许 admin 和 base_agent
+    var userRole string
+    if v, ok := claims["role"]; ok {
+        if s, ok2 := v.(string); ok2 { userRole = s }
+    }
 
 	var req CreateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -79,23 +77,56 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 验证角色合法性
-	validRoles := map[string]bool{
-		"admin":           true,
-		"base_agent":      true,
-		"captain":         true,
-		"factory_manager": true,
-	}
-	if !validRoles[req.Role] {
-		http.Error(w, "角色参数无效", http.StatusBadRequest)
-		return
-	}
+    // 验证创建目标角色合法性；若创建者为base_agent，仅允许创建 captain，并且必须绑定其负责的基地
+    validRoles := map[string]bool{"admin": true, "base_agent": true, "captain": true, "factory_manager": true}
+    if !validRoles[req.Role] {
+        http.Error(w, "角色参数无效", http.StatusBadRequest)
+        return
+    }
+    if userRole == "base_agent" {
+        if req.Role != "captain" {
+            http.Error(w, "基地代理仅可创建队长", http.StatusForbidden)
+            return
+        }
+        if len(req.BaseIDs) == 0 {
+            http.Error(w, "必须为队长指定所属基地", http.StatusBadRequest)
+            return
+        }
+        // 取当前用户可管理的基地集合，限制新用户基地必须是其子集
+        var creator models.User
+        if v, ok := claims["uid"]; ok {
+            if f, ok2 := v.(float64); ok2 {
+                db.DB.Preload("Bases").First(&creator, uint(f))
+            }
+        }
+        allowed := map[uint]bool{}
+        for _, b := range creator.Bases { allowed[b.ID] = true }
+        for _, bid := range req.BaseIDs {
+            if !allowed[bid] {
+                http.Error(w, "不能为非所属基地创建队长", http.StatusForbidden)
+                return
+            }
+        }
+    } else {
+    // 非管理员角色必须指定至少一个基地
+    if req.Role != "admin" && len(req.BaseIDs) == 0 {
+        http.Error(w, "非管理员角色必须指定至少一个基地", http.StatusBadRequest)
+        return
+    }
 
-	// 非管理员角色必须指定至少一个基地
-	if req.Role != "admin" && len(req.BaseIDs) == 0 {
-		http.Error(w, "非管理员角色必须指定至少一个基地", http.StatusBadRequest)
-		return
-	}
+    if userRole == "base_agent" {
+        // 更新后角色仍须为队长，且新的基地集合必须属于该代理的基地
+        if req.Role != "captain" {
+            http.Error(w, "基地代理仅可将角色设置为队长", http.StatusForbidden)
+            return
+        }
+        var me models.User
+        if v, ok := claims["uid"]; ok { if f, ok2 := v.(float64); ok2 { db.DB.Preload("Bases").First(&me, uint(f)) } }
+        allowed := map[uint]bool{}
+        for _, b := range me.Bases { allowed[b.ID] = true }
+        for _, bid := range req.BaseIDs { if !allowed[bid] { http.Error(w, "不能将队长分配到非所属基地", http.StatusForbidden); return } }
+    }
+    }
 
 	// 检查用户名是否已存在
 	var existingUser models.User
@@ -157,11 +188,11 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 提交事务
-	if err := tx.Commit().Error; err != nil {
-		http.Error(w, "提交事务失败", http.StatusInternalServerError)
-		return
-	}
+    // 提交事务
+    if err := tx.Commit().Error; err != nil {
+        http.Error(w, "提交事务失败", http.StatusInternalServerError)
+        return
+    }
 
 	// 预加载基地信息
 	db.DB.Preload("Bases").First(&user, user.ID)
@@ -192,27 +223,54 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 
 // ListUsers 查询用户列表
 func ListUsers(w http.ResponseWriter, r *http.Request) {
-	// JWT权限验证
-	claims, err := middleware.ParseJWT(r)
-	if err != nil {
-		http.Error(w, "token无效", http.StatusUnauthorized)
-		return
-	}
+    // JWT权限验证
+    claims, err := middleware.ParseJWT(r)
+    if err != nil {
+        http.Error(w, "token无效", http.StatusUnauthorized)
+        return
+    }
 
-	// 只有管理员可以查看用户列表
-	userRole := claims["role"].(string)
-	if userRole != "admin" {
-		http.Error(w, "没有权限查看用户列表", http.StatusForbidden)
-		return
-	}
+    var userRole string
+    if v, ok := claims["role"]; ok {
+        if s, ok2 := v.(string); ok2 { userRole = s }
+    }
 
-	var users []models.User
-	query := db.DB.Select("id, name, role, join_date, mobile, passport_number, visa_expiry_date, created_at, updated_at").Preload("Bases").Order("id desc")
+    var users []models.User
+    query := db.DB.Model(&models.User{}).
+        Select("users.id, users.name, users.role, users.join_date, users.mobile, users.passport_number, users.visa_expiry_date, users.created_at, users.updated_at").
+        Preload("Bases").
+        Order("users.id desc")
 
-	// 支持角色筛选
-	if role := r.URL.Query().Get("role"); role != "" {
-		query = query.Where("role = ?", role)
-	}
+    if userRole == "base_agent" {
+        // 仅查询自己基地下的队长
+        var me models.User
+        if v, ok := claims["uid"]; ok {
+            if f, ok2 := v.(float64); ok2 {
+                db.DB.Preload("Bases").First(&me, uint(f))
+            }
+        }
+        var baseIDs []uint
+        for _, b := range me.Bases { baseIDs = append(baseIDs, b.ID) }
+        if len(baseIDs) == 0 {
+            // 无基地则返回空
+            w.Header().Set("Content-Type", "application/json")
+            json.NewEncoder(w).Encode([]UserResponse{})
+            return
+        }
+        query = query.
+            Joins("JOIN user_bases ub ON ub.user_id = users.id").
+            Where("ub.base_id IN ?", baseIDs).
+            Where("users.role = ?", "captain").
+            Group("users.id")
+    } else if userRole != "admin" {
+        http.Error(w, "没有权限查看用户列表", http.StatusForbidden)
+        return
+    }
+
+    // 支持角色筛选
+    if role := r.URL.Query().Get("role"); role != "" {
+        query = query.Where("users.role = ?", role)
+    }
 
 	// 支持基地筛选
 	if baseID := r.URL.Query().Get("base_id"); baseID != "" {
@@ -233,8 +291,8 @@ func ListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 转换为响应结构
-	var response []UserResponse
+    // 转换为响应结构（确保空数组而非null）
+    response := make([]UserResponse, 0, len(users))
 	for _, user := range users {
 		resp := UserResponse{
 			ID:             user.ID,
@@ -271,12 +329,8 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 只有管理员可以查看用户详情
-	userRole := claims["role"].(string)
-	if userRole != "admin" {
-		http.Error(w, "没有权限查看用户详情", http.StatusForbidden)
-		return
-	}
+    var userRole string
+    if v, ok := claims["role"]; ok { if s, ok2 := v.(string); ok2 { userRole = s } }
 
 	userID, err := strconv.ParseUint(r.URL.Query().Get("id"), 10, 64)
 	if err != nil {
@@ -285,10 +339,31 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var user models.User
-	if err := db.DB.Select("id, name, role, join_date, mobile, passport_number, visa_expiry_date, created_at, updated_at").Preload("Bases").First(&user, userID).Error; err != nil {
-		http.Error(w, "用户不存在", http.StatusNotFound)
-		return
-	}
+    if err := db.DB.Select("id, name, role, join_date, mobile, passport_number, visa_expiry_date, created_at, updated_at").Preload("Bases").First(&user, userID).Error; err != nil {
+        http.Error(w, "用户不存在", http.StatusNotFound)
+        return
+    }
+
+    if userRole == "base_agent" {
+        // 仅允许查看自己基地下的队长
+        if user.Role != "captain" {
+            http.Error(w, "无权限查看该用户", http.StatusForbidden)
+            return
+        }
+        var me models.User
+        if v, ok := claims["uid"]; ok { if f, ok2 := v.(float64); ok2 { db.DB.Preload("Bases").First(&me, uint(f)) } }
+        allowed := map[uint]bool{}
+        for _, b := range me.Bases { allowed[b.ID] = true }
+        has := false
+        for _, b := range user.Bases { if allowed[b.ID] { has = true; break } }
+        if !has {
+            http.Error(w, "无权限查看该用户", http.StatusForbidden)
+            return
+        }
+    } else if userRole != "admin" {
+        http.Error(w, "没有权限查看用户详情", http.StatusForbidden)
+        return
+    }
 
 	response := UserResponse{
 		ID:             user.ID,
@@ -322,12 +397,8 @@ func UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 只有管理员可以更新用户
-	userRole := claims["role"].(string)
-	if userRole != "admin" {
-		http.Error(w, "没有权限更新用户", http.StatusForbidden)
-		return
-	}
+    // 允许 admin；base_agent 需进一步限制
+    userRole := claims["role"].(string)
 
 	userID, err := strconv.ParseUint(r.URL.Query().Get("id"), 10, 64)
 	if err != nil {
@@ -365,12 +436,28 @@ func UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 查找用户
-	var user models.User
-	if err := db.DB.First(&user, userID).Error; err != nil {
-		http.Error(w, "用户不存在", http.StatusNotFound)
-		return
-	}
+    // 查找用户
+    var user models.User
+    if err := db.DB.Preload("Bases").First(&user, userID).Error; err != nil {
+        http.Error(w, "用户不存在", http.StatusNotFound)
+        return
+    }
+
+    if userRole == "base_agent" {
+        // 仅允许管理自己基地下的队长
+        if user.Role != "captain" {
+            http.Error(w, "基地代理仅可管理队长", http.StatusForbidden)
+            return
+        }
+        var me models.User
+        if v, ok := claims["uid"]; ok { if f, ok2 := v.(float64); ok2 { db.DB.Preload("Bases").First(&me, uint(f)) } }
+        allowed := map[uint]bool{}
+        for _, b := range me.Bases { allowed[b.ID] = true }
+        for _, b := range user.Bases { if !allowed[b.ID] { http.Error(w, "无权限管理该队长", http.StatusForbidden); return } }
+    } else if userRole != "admin" {
+        http.Error(w, "没有权限更新用户", http.StatusForbidden)
+        return
+    }
 
 	// 检查用户名是否与其他用户冲突
 	var existingUser models.User
@@ -529,12 +616,8 @@ func DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 只有管理员可以删除用户
-	userRole := claims["role"].(string)
-	if userRole != "admin" {
-		http.Error(w, "没有权限删除用户", http.StatusForbidden)
-		return
-	}
+    // 允许 admin；base_agent 需限制
+    userRole := claims["role"].(string)
 
 	userID, err := strconv.ParseUint(r.URL.Query().Get("id"), 10, 64)
 	if err != nil {
@@ -542,15 +625,30 @@ func DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 查找用户
-	var user models.User
-	if err := db.DB.First(&user, userID).Error; err != nil {
-		http.Error(w, "用户不存在", http.StatusNotFound)
-		return
-	}
+    // 查找用户
+    var user models.User
+    if err := db.DB.Preload("Bases").First(&user, userID).Error; err != nil {
+        http.Error(w, "用户不存在", http.StatusNotFound)
+        return
+    }
 
-	// 不能删除自己
-	currentUserID := uint(claims["uid"].(float64))
+    if userRole == "base_agent" {
+        if user.Role != "captain" {
+            http.Error(w, "基地代理仅可删除队长", http.StatusForbidden)
+            return
+        }
+        var me models.User
+        if v, ok := claims["uid"]; ok { if f, ok2 := v.(float64); ok2 { db.DB.Preload("Bases").First(&me, uint(f)) } }
+        allowed := map[uint]bool{}
+        for _, b := range me.Bases { allowed[b.ID] = true }
+        for _, b := range user.Bases { if !allowed[b.ID] { http.Error(w, "无权限删除该队长", http.StatusForbidden); return } }
+    } else if userRole != "admin" {
+        http.Error(w, "没有权限删除用户", http.StatusForbidden)
+        return
+    }
+
+    // 不能删除自己
+    currentUserID := uint(claims["uid"].(float64))
 	if user.ID == currentUserID {
 		http.Error(w, "不能删除自己的账户", http.StatusForbidden)
 		return
@@ -606,12 +704,8 @@ func BatchDeleteUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 只有管理员可以批量删除用户
-	userRole := claims["role"].(string)
-	if userRole != "admin" {
-		http.Error(w, "没有权限删除用户", http.StatusForbidden)
-		return
-	}
+    // 允许 admin；base_agent 需限制
+    userRole := claims["role"].(string)
 
 	var req BatchDeleteUsersRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -624,7 +718,7 @@ func BatchDeleteUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	currentUserID := uint(claims["uid"].(float64))
+    currentUserID := uint(claims["uid"].(float64))
 
 	// 检查是否包含当前用户
 	for _, id := range req.IDs {
@@ -636,24 +730,34 @@ func BatchDeleteUsers(w http.ResponseWriter, r *http.Request) {
 
 	// 查询要删除的用户
 	var users []models.User
-	if err := db.DB.Where("id IN ?", req.IDs).Find(&users).Error; err != nil {
-		http.Error(w, "查询用户失败", http.StatusInternalServerError)
-		return
-	}
+    if err := db.DB.Preload("Bases").Where("id IN ?", req.IDs).Find(&users).Error; err != nil {
+        http.Error(w, "查询用户失败", http.StatusInternalServerError)
+        return
+    }
 
 	if len(users) == 0 {
 		http.Error(w, "没有找到要删除的用户", http.StatusNotFound)
 		return
 	}
 
-	// 检查每个用户是否可以删除
-	for _, user := range users {
-		// 检查费用记录关联
-		var expenseCount int64
-		if err := db.DB.Model(&models.BaseExpense{}).Where("created_by = ?", user.ID).Count(&expenseCount).Error; err == nil && expenseCount > 0 {
-			http.Error(w, "用户「"+user.Name+"」下还有费用记录，无法删除", http.StatusConflict)
-			return
-		}
+    // 检查每个用户是否可以删除
+    for _, user := range users {
+        if userRole == "base_agent" {
+            if user.Role != "captain" { http.Error(w, "基地代理仅可删除队长", http.StatusForbidden); return }
+            var me models.User
+            if v, ok := claims["uid"]; ok { if f, ok2 := v.(float64); ok2 { db.DB.Preload("Bases").First(&me, uint(f)) } }
+            allowed := map[uint]bool{}
+            for _, b := range me.Bases { allowed[b.ID] = true }
+            for _, b := range user.Bases { if !allowed[b.ID] { http.Error(w, "无权限删除该队长", http.StatusForbidden); return } }
+        } else if userRole != "admin" {
+            http.Error(w, "没有权限删除用户", http.StatusForbidden); return
+        }
+        // 检查费用记录关联
+        var expenseCount int64
+        if err := db.DB.Model(&models.BaseExpense{}).Where("created_by = ?", user.ID).Count(&expenseCount).Error; err == nil && expenseCount > 0 {
+            http.Error(w, "用户「"+user.Name+"」下还有费用记录，无法删除", http.StatusConflict)
+            return
+        }
 
 		// 检查采购记录关联
 		var purchaseCount int64
@@ -699,12 +803,8 @@ func ResetUserPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 只有管理员可以重置用户密码
-	userRole := claims["role"].(string)
-	if userRole != "admin" {
-		http.Error(w, "没有权限重置用户密码", http.StatusForbidden)
-		return
-	}
+    // 允许 admin；base_agent 需限制
+    userRole := claims["role"].(string)
 
 	userID, err := strconv.ParseUint(r.URL.Query().Get("id"), 10, 64)
 	if err != nil {
@@ -723,12 +823,27 @@ func ResetUserPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 查找用户
-	var user models.User
-	if err := db.DB.First(&user, userID).Error; err != nil {
-		http.Error(w, "用户不存在", http.StatusNotFound)
-		return
-	}
+    // 查找用户
+    var user models.User
+    if err := db.DB.Preload("Bases").First(&user, userID).Error; err != nil {
+        http.Error(w, "用户不存在", http.StatusNotFound)
+        return
+    }
+
+    if userRole == "base_agent" {
+        if user.Role != "captain" {
+            http.Error(w, "基地代理仅可重置队长密码", http.StatusForbidden)
+            return
+        }
+        var me models.User
+        if v, ok := claims["uid"]; ok { if f, ok2 := v.(float64); ok2 { db.DB.Preload("Bases").First(&me, uint(f)) } }
+        allowed := map[uint]bool{}
+        for _, b := range me.Bases { allowed[b.ID] = true }
+        for _, b := range user.Bases { if !allowed[b.ID] { http.Error(w, "无权限重置该队长", http.StatusForbidden); return } }
+    } else if userRole != "admin" {
+        http.Error(w, "没有权限重置用户密码", http.StatusForbidden)
+        return
+    }
 
 	// 密码加密
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)

@@ -10,7 +10,7 @@ type ProductPurchaseParam struct {
     Unit          string    `gorm:"size:32;not null" json:"unit"`
     FactorToBase  float64   `gorm:"not null" json:"factor_to_base"`
     PurchasePrice float64   `gorm:"type:decimal(15,2);not null" json:"purchase_price"`
+    Currency      string    `gorm:"size:8;default:CNY" json:"currency"`
     CreatedAt     time.Time `json:"created_at"`
     UpdatedAt     time.Time `json:"updated_at"`
 }
-

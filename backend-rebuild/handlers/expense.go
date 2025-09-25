@@ -16,12 +16,15 @@ func ExpenseCreate(w http.ResponseWriter, r *http.Request) {
         Date string `json:"date"`
         CategoryID uint `json:"category_id"`
         Amount float64 `json:"amount"`
+        Currency string `json:"currency"`
         Detail string `json:"detail"`
         BaseID uint `json:"base_id"`
     }
     if err := json.NewDecoder(r.Body).Decode(&body); err != nil { http.Error(w, "bad body", http.StatusBadRequest); return }
     d, err := time.Parse("2006-01-02", body.Date); if err != nil { http.Error(w, "bad date", http.StatusBadRequest); return }
-    exp := models.BaseExpense{ Date: d, CategoryID: body.CategoryID, Amount: body.Amount, Detail: body.Detail, BaseID: body.BaseID, CreatedAt: time.Now(), UpdatedAt: time.Now() }
+    cur := body.Currency
+    if cur == "" { cur = "CNY" }
+    exp := models.BaseExpense{ Date: d, CategoryID: body.CategoryID, Amount: body.Amount, Currency: cur, Detail: body.Detail, BaseID: body.BaseID, CreatedAt: time.Now(), UpdatedAt: time.Now() }
     if err := db.DB.Create(&exp).Error; err != nil { http.Error(w, "create failed", http.StatusInternalServerError); return }
     w.Header().Set("Content-Type", "application/json")
     _ = json.NewEncoder(w).Encode(exp)

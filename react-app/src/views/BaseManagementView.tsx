@@ -4,7 +4,7 @@
  * 管理员专用功能，用于管理系统中的基地信息
  * 支持基地的增删改查操作
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Paper,
   Box,
@@ -70,7 +70,7 @@ const BaseManagementView: React.FC = () => {
   ];
   
   // 创建 ApiClient 实例
-  const apiClient = new ApiClient();
+  const apiClient = useMemo(() => new ApiClient(), []);
 
   const loadBases = async () => {
     setLoading(true);

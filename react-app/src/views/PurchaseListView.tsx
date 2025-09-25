@@ -27,13 +27,17 @@ import {
   Checkbox,
   Link
 } from '@mui/material';
-import {
+import { 
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
   Visibility as ViewIcon
 } from '@mui/icons-material';
+import { ReceiptLong as ReceiptIcon, CloudUpload as UploadIcon, PhotoCamera as CameraIcon, OpenInNew as OpenInNewIcon } from '@mui/icons-material';
+import CameraCaptureDialog from '@/components/CameraCaptureDialog';
+import ImageEditDialog from '@/components/ImageEditDialog';
 import { Purchase, FilterOptions } from '@/api/AppDtos';
+// 金额/币种展示规则：仅显示数字与英文币种代码
 import PurchaseForm from '@/components/PurchaseForm';
 import QueryFilter from '@/components/QueryFilter';
 import { TableSkeleton } from '@/components/LoadingComponents';
@@ -55,6 +59,15 @@ const PurchaseListView: React.FC = () => {
   const [error, setError] = useState<string>('');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [toDeleteId, setToDeleteId] = useState<number | null>(null);
+  // 票据上传/查看
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [receiptPurchase, setReceiptPurchase] = useState<Purchase | null>(null);
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
+  const [uploadErr, setUploadErr] = useState('');
+  const cameraSupported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editBlob, setEditBlob] = useState<Blob | null>(null);
   const location = useLocation();
   const initialFromSearch = useMemo<FilterOptions>(() => {
     const params = new URLSearchParams(location.search);
@@ -92,7 +105,7 @@ const PurchaseListView: React.FC = () => {
   ];
   
   // 创建 ApiClient 实例
-  const apiClient = new ApiClient();
+  const apiClient = useMemo(() => new ApiClient(), []);
   const productApi = useMemo(() => new ProductApi(), []);
   const [hasProducts, setHasProducts] = useState<boolean>(true);
 
@@ -156,6 +169,52 @@ const PurchaseListView: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // 压缩图片到 <= 2MB，最长边限制 2000px
+  const compressImage = (file: File, maxBytes = 2 * 1024 * 1024, maxDim = 2000): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      if (!file.type.startsWith('image/')) { reject(new Error('只支持图片文件')); return; }
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let { width, height } = img as any;
+        const scale = Math.min(1, maxDim / Math.max(width, height));
+        width = Math.round(width * scale); height = Math.round(height * scale);
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext('2d'); if (!ctx) { URL.revokeObjectURL(url); reject(new Error('压缩失败')); return; }
+        ctx.drawImage(img, 0, 0, width, height);
+        const qualities = [0.92, 0.85, 0.8, 0.7, 0.6];
+        (function next(i:number){
+          canvas.toBlob((blob)=>{
+            if (!blob) { URL.revokeObjectURL(url); reject(new Error('压缩失败')); return; }
+            if (blob.size <= maxBytes || i === qualities.length - 1) {
+              const out = new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' });
+              URL.revokeObjectURL(url); resolve(out);
+            } else { next(i+1); }
+          }, 'image/jpeg', qualities[i]);
+        })(0);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('读取图片失败')); };
+      img.src = url;
+    });
+  };
+
+  const openReceipt = (p: Purchase) => { setReceiptPurchase(p); setUploadErr(''); setReceiptOpen(true); };
+  const handleUploadReceipt = async (file: File) => {
+    if (!receiptPurchase) return;
+    try {
+      setUploadingReceipt(true); setUploadErr('');
+      const cf = await compressImage(file);
+      const resp = await apiClient.uploadPurchaseReceipt({ purchase_id: receiptPurchase.id!, date: receiptPurchase.purchase_date?.slice(0,10), file: cf });
+      const newPath = resp.path;
+      setPurchases(prev => prev.map(it => it.id === receiptPurchase.id ? { ...it, receipt_path: newPath } : it));
+      setReceiptPurchase(prev => prev ? { ...prev, receipt_path: newPath } as any : prev);
+      notification.showSuccess('票据已上传');
+    } catch(e:any) {
+      setUploadErr(e?.message || '上传失败'); notification.showError(e?.message || '上传失败');
+    } finally { setUploadingReceipt(false); }
   };
 
   const handleFilter = (newFilters: FilterOptions) => {
@@ -421,7 +480,7 @@ const PurchaseListView: React.FC = () => {
       />
 
       {loading ? (
-        <TableSkeleton rows={5} columns={7} />
+        <TableSkeleton rows={5} columns={8} />
       ) : (
         <Table>
           <TableHead>
@@ -433,6 +492,7 @@ const PurchaseListView: React.FC = () => {
               <TableCell>供应商</TableCell>
               <TableCell>采购日期</TableCell>
               <TableCell>总金额</TableCell>
+              <TableCell>币种</TableCell>
               <TableCell>收货人</TableCell>
               <TableCell>创建人</TableCell>
               <TableCell align="right">操作</TableCell>
@@ -457,13 +517,19 @@ const PurchaseListView: React.FC = () => {
                   <TableCell>{purchase.order_number}</TableCell>
                   <TableCell>{typeof purchase.supplier === 'object' ? (purchase.supplier as any).name : purchase.supplier}</TableCell>
                   <TableCell>{purchase.purchase_date ? dayjs(purchase.purchase_date).format('YYYY-MM-DD') : '-'}</TableCell>
-                  <TableCell>¥{purchase.total_amount?.toFixed(2) || '0.00'}</TableCell>
+                  <TableCell>{Number(purchase.total_amount ?? 0).toFixed(2)}</TableCell>
+                  <TableCell>{String((purchase as any).currency || (purchase.base as any)?.currency || 'CNY').toUpperCase()}</TableCell>
                   <TableCell>{purchase.receiver}</TableCell>
-                  <TableCell>{purchase.creator_name || '-'}</TableCell>
+                  <TableCell>{(purchase as any).creator?.name || purchase.creator_name || '-'}</TableCell>
                   <TableCell align="right">
                     <Tooltip title="查看商品详情">
                       <IconButton size="small" onClick={() => handleViewItems(purchase)}>
                         <ViewIcon />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="查看票据">
+                      <IconButton size="small" onClick={() => openReceipt(purchase)}>
+                        <ReceiptIcon />
                       </IconButton>
                     </Tooltip>
                     <Tooltip title="编辑">
@@ -503,6 +569,57 @@ const PurchaseListView: React.FC = () => {
         confirmColor="error"
       />
 
+      {/* 票据查看/上传 */}
+      <Dialog open={receiptOpen} onClose={()=> setReceiptOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>查看票据</DialogTitle>
+        <DialogContent>
+          {receiptPurchase?.receipt_path ? (
+            <Box sx={{ mb: 2 }}>
+              <Box sx={{ display:'flex', alignItems:'center', gap:1, mb:1 }}>
+                <OpenInNewIcon fontSize="small" />
+                <a href={`${import.meta.env.VITE_API_URL}${receiptPurchase.receipt_path}`} target="_blank" rel="noreferrer">在新窗口打开</a>
+              </Box>
+              <Box sx={{ border:'1px solid', borderColor:'divider', borderRadius:1, overflow:'hidden' }}>
+                <img alt="票据" src={`${import.meta.env.VITE_API_URL}${receiptPurchase.receipt_path}`} style={{ width:'100%', display:'block' }} />
+              </Box>
+            </Box>
+          ) : (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>暂无票据</Typography>
+          )}
+          {uploadErr && <Alert severity="error" sx={{ mb: 1 }}>{uploadErr}</Alert>}
+          <Box sx={{ display:'flex', gap:1, flexWrap:'wrap' }}>
+            <Button variant="outlined" startIcon={<UploadIcon />} component="label" disabled={uploadingReceipt}>
+              {receiptPurchase?.receipt_path ? '更换票据' : '上传票据'}
+              <input type="file" accept="image/*" hidden onChange={(e)=>{ const f=e.target.files?.[0]; e.currentTarget.value=''; if(!f) return; if(!f.type.startsWith('image/')) { setUploadErr('只支持图片格式'); return; } setEditBlob(f); setEditOpen(true); }} />
+            </Button>
+            {cameraSupported && (
+              <Button variant="outlined" startIcon={<CameraIcon />} disabled={uploadingReceipt} onClick={()=> setCameraOpen(true)}>
+                拍照上传
+              </Button>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={()=> setReceiptOpen(false)}>关闭</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 相机拍照（即时上传） */}
+      <CameraCaptureDialog
+        open={cameraOpen}
+        onClose={()=> setCameraOpen(false)}
+        instant
+        onCapture={async (blob)=>{ setEditBlob(blob); setEditOpen(true); }}
+      />
+
+      {/* 图片编辑 */}
+      <ImageEditDialog
+        open={editOpen}
+        file={editBlob}
+        onClose={()=> setEditOpen(false)}
+        onDone={async (blob)=>{ const file = new File([blob], `receipt_${Date.now()}.jpg`, { type: blob.type || 'image/jpeg' }); await handleUploadReceipt(file); }}
+      />
+
       {/* 商品详情对话框 */}
       <Dialog open={itemsDialogOpen} onClose={() => setItemsDialogOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>商品详情</DialogTitle>
@@ -516,6 +633,7 @@ const PurchaseListView: React.FC = () => {
                   <TableCell>数量</TableCell>
                   <TableCell>单价</TableCell>
                   <TableCell>金额</TableCell>
+                  <TableCell>币种</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -524,13 +642,15 @@ const PurchaseListView: React.FC = () => {
                     <TableCell>{item.product_name}</TableCell>
                     <TableCell>{(item as any).unit || '-'}</TableCell>
                     <TableCell>{item.quantity}</TableCell>
-                    <TableCell>¥{item.unit_price?.toFixed(2) || '0.00'}</TableCell>
-                    <TableCell>¥{item.amount?.toFixed(2) || '0.00'}</TableCell>
+                    <TableCell>{Number(item.unit_price ?? 0).toFixed(2)}</TableCell>
+                    <TableCell>{Number(item.amount ?? 0).toFixed(2)}</TableCell>
+                    <TableCell>{String((selectedPurchaseItems as any)?.currency || (selectedPurchaseItems as any)?.base?.currency || 'CNY').toUpperCase()}</TableCell>
                   </TableRow>
                 ))}
                 <TableRow>
                   <TableCell colSpan={3} align="right"><strong>总计:</strong></TableCell>
-                  <TableCell><strong>¥{selectedPurchaseItems.total_amount?.toFixed(2) || '0.00'}</strong></TableCell>
+                  <TableCell><strong>{Number(selectedPurchaseItems.total_amount ?? 0).toFixed(2)}</strong></TableCell>
+                  <TableCell><strong>{String((selectedPurchaseItems as any)?.currency || (selectedPurchaseItems as any)?.base?.currency || 'CNY').toUpperCase()}</strong></TableCell>
                 </TableRow>
               </TableBody>
             </Table>

@@ -41,10 +41,15 @@ func UpdatePurchase(w http.ResponseWriter, r *http.Request) {
     tx.Where("purchase_entry_id = ?", p.ID).Find(&oldLinks)
 
     // Update header
+    var base models.Base
+    if err := tx.First(&base, req.BaseID).Error; err != nil { tx.Rollback(); http.Error(w, "base missing", http.StatusBadRequest); return }
+    cur := base.Currency
+    if cur == "" { cur = "CNY" }
     p.SupplierID = req.SupplierID
     p.OrderNumber = req.OrderNumber
     p.PurchaseDate = pd
     p.TotalAmount = req.TotalAmount
+    p.Currency = cur
     p.Receiver = req.Receiver
     p.BaseID = req.BaseID
     p.UpdatedAt = time.Now()
@@ -85,19 +90,19 @@ func UpdatePurchase(w http.ResponseWriter, r *http.Request) {
     var sup models.Supplier
     if err := tx.First(&sup, *req.SupplierID).Error; err != nil { tx.Rollback(); http.Error(w, "supplier missing", http.StatusBadRequest); return }
     periodMonth, periodHalf, due := computePeriod(pd, sup.SettlementType, sup.SettlementDay)
-    target, err := findOrCreateOpenPayable(tx, *req.SupplierID, req.BaseID, sup.SettlementType, periodMonth, periodHalf, due)
+    target, err := findOrCreateOpenPayable(tx, *req.SupplierID, req.BaseID, sup.SettlementType, periodMonth, periodHalf, due, cur)
     if err != nil { tx.Rollback(); http.Error(w, "find payable failed", http.StatusInternalServerError); return }
 
     if len(oldLinks) == 0 {
         // create new link
-        if err := tx.Create(&models.PayableLink{PayableRecordID: target.ID, PurchaseEntryID: p.ID, Amount: p.TotalAmount}).Error; err != nil { tx.Rollback(); http.Error(w, "create link failed", http.StatusInternalServerError); return }
+        if err := tx.Create(&models.PayableLink{PayableRecordID: target.ID, PurchaseEntryID: p.ID, Amount: p.TotalAmount, Currency: cur}).Error; err != nil { tx.Rollback(); http.Error(w, "create link failed", http.StatusInternalServerError); return }
         if err := recalcPayable(tx, target.ID); err != nil { tx.Rollback(); http.Error(w, err.Error(), http.StatusInternalServerError); return }
     } else {
         // Update/move existing link (assume single link typical)
         link := oldLinks[0]
         if link.PayableRecordID != target.ID {
             if err := tx.Delete(&link).Error; err != nil { tx.Rollback(); http.Error(w, "delete old link failed", http.StatusInternalServerError); return }
-            if err := tx.Create(&models.PayableLink{PayableRecordID: target.ID, PurchaseEntryID: p.ID, Amount: p.TotalAmount}).Error; err != nil { tx.Rollback(); http.Error(w, "create new link failed", http.StatusInternalServerError); return }
+            if err := tx.Create(&models.PayableLink{PayableRecordID: target.ID, PurchaseEntryID: p.ID, Amount: p.TotalAmount, Currency: cur}).Error; err != nil { tx.Rollback(); http.Error(w, "create new link failed", http.StatusInternalServerError); return }
             // recalc both old and new
             if err := recalcPayable(tx, link.PayableRecordID); err != nil { tx.Rollback(); http.Error(w, err.Error(), http.StatusInternalServerError); return }
             if err := recalcPayable(tx, target.ID); err != nil { tx.Rollback(); http.Error(w, err.Error(), http.StatusInternalServerError); return }
@@ -215,4 +220,3 @@ func ProductSuggestions(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
     _ = json.NewEncoder(w).Encode(rows)
 }
-

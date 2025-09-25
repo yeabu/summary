@@ -10,6 +10,7 @@ type Base struct {
     Location    string        `json:"location"`                       // 基地位置
     Description string        `json:"description"`                    // 基地描述
     Status      string        `gorm:"default:active" json:"status"`   // 状态：active, inactive
+    Currency    string        `gorm:"size:8;default:CNY" json:"currency"` // 记账币种：CNY/LAK/THB
 	Sections    []BaseSection `gorm:"foreignKey:BaseID" json:"-"`     // 关联的分区
 	Users       []User        `gorm:"many2many:user_bases;" json:"-"` // 关联的用户列表
 	CreatedBy   uint          `json:"created_by"`                     // 创建人ID

@@ -1,0 +1,45 @@
+const req = require('../../../utils/request');
+const { makeFabStyle } = require('../../../utils/theme');
+
+Page({
+  data: { items: [], loading: true, payOpen:false, payForm:{ payable_record_id:'', payment_amount:'', payment_date:'', payment_method:'bank_transfer', reference_number:'', notes:'' }, methodRange:['现金','银行转账','支票','其他'], methodMap:['cash','bank_transfer','check','other'], methodIndex:1, saving:false, fabStyle:'' },
+  async onShow() {
+    const themeColor = getApp().globalData.themeColor;
+    this.setData({ loading: true, fabStyle: makeFabStyle(themeColor) });
+    try {
+      const data = await req.get('/api/payable/list');
+      const raw = Array.isArray(data) ? data : (data.records || []);
+      // 预计算展示字段，避免 WXML 表达式复杂度
+      const items = raw.map(it => ({
+        id: it.id,
+        supplierName: (typeof it.supplier === 'object' && it.supplier) ? (it.supplier.name || '') : (it.supplier || ''),
+        baseName: (it.base && it.base.name) ? it.base.name : '',
+        remaining: (it.remaining_amount != null ? it.remaining_amount : it.remainingAmount) || 0,
+        status: it.status
+      }));
+      this.setData({ items });
+    } catch (e) {
+      wx.showToast({ title: '加载失败', icon: 'none' });
+    } finally {
+      this.setData({ loading: false });
+    }
+  },
+  async onPullDownRefresh() {
+    try {
+      await this.onShow();
+    } finally {
+      wx.stopPullDownRefresh();
+    }
+  },
+  goCreatePurchase(){ wx.navigateTo({ url:'/pages/purchase/list/index' }); },
+  openPay(e){ const id=e.currentTarget.dataset.id; const today=new Date().toISOString().slice(0,10); this.setData({ payOpen:true, payForm:{ payable_record_id:id, payment_amount:'', payment_date:today, payment_method:'bank_transfer', reference_number:'', notes:'' }, methodIndex:1 }); },
+  closePay(){ this.setData({ payOpen:false }); },
+  iPayAmount(e){ this.setData({ 'payForm.payment_amount': Number(e.detail.value) }); },
+  onPayDate(e){ this.setData({ 'payForm.payment_date': e.detail.value }); },
+  onMethod(e){ const i=Number(e.detail.value); this.setData({ methodIndex:i, 'payForm.payment_method': this.data.methodMap[i] }); },
+  iRef(e){ this.setData({ 'payForm.reference_number': e.detail.value }); },
+  iNotes(e){ this.setData({ 'payForm.notes': e.detail.value }); },
+  async savePayment(){ const f=this.data.payForm; if(!f.payable_record_id || !f.payment_amount || !f.payment_date){ wx.showToast({ title:'请填必填项', icon:'none' }); return; } this.setData({ saving:true }); try{ await req.post('/api/payment/create', f); this.setData({ payOpen:false }); await this.onShow(); wx.showToast({ title:'已保存', icon:'success' }); }catch(e){ wx.showToast({ title:'保存失败', icon:'none' }); } finally{ this.setData({ saving:false }); } },
+  openDetail(e){ const id=e.currentTarget.dataset.id; wx.navigateTo({ url:'/pages/payable/detail/index?id='+id }); },
+  explainDelete(){ wx.showToast({ title:'应付款由采购/还款自动维护，不能直接删除', icon:'none' }); }
+});

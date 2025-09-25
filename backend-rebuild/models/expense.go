@@ -18,6 +18,7 @@ type BaseExpense struct {
     CategoryID  uint            `gorm:"index;not null" json:"category_id"`
     Category    ExpenseCategory `gorm:"foreignKey:CategoryID" json:"category"`
     Amount      float64         `json:"amount"`
+    Currency    string          `gorm:"size:8;default:'CNY'" json:"currency"`
     Detail      string          `json:"detail"`
     CreatedBy   uint            `json:"created_by"`
     CreatorName string          `json:"creator_name"`
