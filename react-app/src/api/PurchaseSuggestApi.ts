@@ -1,4 +1,5 @@
 import { getValidAccessTokenOrRefresh } from "../utils/authToken";
+import { API_URL } from "@/config";
 
 export interface SupplierSuggestion {
   id: number;
@@ -15,7 +16,7 @@ export interface ProductSuggestion {
 }
 
 export class PurchaseSuggestApi {
-  private apiUrl = import.meta.env.VITE_API_URL;
+  private apiUrl = API_URL;
 
   private async apiCall<T>(endpoint: string): Promise<T> {
     const token = await getValidAccessTokenOrRefresh();

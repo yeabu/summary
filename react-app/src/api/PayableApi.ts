@@ -1,5 +1,6 @@
 import useAuthStore from "../auth/AuthStore";
 import { getValidAccessTokenOrRefresh } from "../utils/authToken";
+import { API_URL } from "@/config";
 
 // 应付款记录类型定义
 export interface PayableRecord {
@@ -235,7 +236,7 @@ export const PaymentMethodText = {
 
 // 修改apiCall函数
 const apiCall = async <T>(endpoint: string, options: RequestInit = {}): Promise<T> => {
-  const apiUrl = import.meta.env.VITE_API_URL;
+  const apiUrl = API_URL;
   
   // 使用与ApiClient.ts中相同的token获取机制
   const token = await getValidAccessTokenOrRefresh();

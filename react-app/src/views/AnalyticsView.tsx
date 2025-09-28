@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { API_URL } from '@/config';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -98,7 +99,7 @@ const AnalyticsView: React.FC = () => {
     try {
       setRangeLoading(true);
       setRangeError(undefined);
-      const apiUrl = import.meta.env.VITE_API_URL;
+      const apiUrl = API_URL;
       const token = await getValidAccessTokenOrRefresh();
       const url = `${apiUrl}/api/analytics/summary?start_date=${encodeURIComponent(rangeStart)}&end_date=${encodeURIComponent(rangeEnd)}`;
       const res = await fetch(url, { headers: { 'Authorization': token ? `Bearer ${token}` : '' } });
@@ -174,7 +175,7 @@ const AnalyticsView: React.FC = () => {
   const loadExpenseByBase = async () => {
     try {
       setExpByBaseLoading(true); setExpByBaseError(null);
-      const apiUrl = import.meta.env.VITE_API_URL;
+      const apiUrl = API_URL;
       const token = await getValidAccessTokenOrRefresh();
       const p = new URLSearchParams();
       p.set('start_date', rangeStart); p.set('end_date', rangeEnd);
@@ -200,7 +201,7 @@ const AnalyticsView: React.FC = () => {
   const loadRequisitionByBase = async () => {
     try {
       setReqByBaseLoading(true); setReqByBaseError(null);
-      const apiUrl = import.meta.env.VITE_API_URL;
+      const apiUrl = API_URL;
       const token = await getValidAccessTokenOrRefresh();
       const p = new URLSearchParams();
       p.set('start_date', rangeStart); p.set('end_date', rangeEnd);

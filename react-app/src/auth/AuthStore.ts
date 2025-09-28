@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { LoginRequest, LoginResponse, ChangePasswordRequest } from '../api/AppDtos';
+import { API_URL } from '@/config';
 
 interface User {
   user_id: number;
@@ -43,7 +44,7 @@ const useAuthStore = create<AuthState>((set, get) => ({
       const loginRequest: LoginRequest = { name, password };
       
       // 直接调用登录API，不使用ApiClient类
-      const apiUrl = import.meta.env.VITE_API_URL;
+      const apiUrl = API_URL;
       const response = await fetch(`${apiUrl}/api/login`, {
         method: 'POST',
         headers: {
@@ -95,7 +96,7 @@ const useAuthStore = create<AuthState>((set, get) => ({
       }
       
       // 直接调用修改密码API，不使用ApiClient类
-      const apiUrl = import.meta.env.VITE_API_URL;
+      const apiUrl = API_URL;
       const response = await fetch(`${apiUrl}/api/user/change-password`, {
         method: 'POST',
         headers: {

@@ -1,4 +1,5 @@
 import { getValidAccessTokenOrRefresh } from "../utils/authToken";
+import { API_URL } from "@/config";
 
 // 供应商类型定义
 export interface Supplier {
@@ -43,7 +44,7 @@ export interface UpdateSupplierRequest {
 }
 
 export class SupplierApi {
-  private apiUrl = import.meta.env.VITE_API_URL;
+  private apiUrl = API_URL;
 
   // 获取供应商列表
   async getSupplierList(params?: {

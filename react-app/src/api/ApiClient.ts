@@ -1,4 +1,5 @@
 import { getValidAccessTokenOrRefresh } from "../utils/authToken";
+import { API_URL } from "@/config";
 
 // 基地类型定义
 export interface Base {
@@ -145,7 +146,7 @@ export interface ExpenseCategory {
 }
 
 export class ApiClient {
-  private apiUrl = import.meta.env.VITE_API_URL;
+  private apiUrl = API_URL;
 
   // 基地管理API
   async baseCreate(data: Omit<Base, 'id' | 'created_at' | 'updated_at'>): Promise<Base> {

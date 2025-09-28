@@ -35,6 +35,7 @@ import {
 } from '@mui/icons-material';
 import { ReceiptLong as ReceiptIcon, CloudUpload as UploadIcon, PhotoCamera as CameraIcon, OpenInNew as OpenInNewIcon } from '@mui/icons-material';
 import CameraCaptureDialog from '@/components/CameraCaptureDialog';
+import { API_URL } from '@/config';
 import ImageEditDialog from '@/components/ImageEditDialog';
 import { Purchase, FilterOptions } from '@/api/AppDtos';
 // 金额/币种展示规则：仅显示数字与英文币种代码
@@ -577,10 +578,10 @@ const PurchaseListView: React.FC = () => {
             <Box sx={{ mb: 2 }}>
               <Box sx={{ display:'flex', alignItems:'center', gap:1, mb:1 }}>
                 <OpenInNewIcon fontSize="small" />
-                <a href={`${import.meta.env.VITE_API_URL}${receiptPurchase.receipt_path}`} target="_blank" rel="noreferrer">在新窗口打开</a>
+                <a href={`${API_URL}${receiptPurchase.receipt_path}`} target="_blank" rel="noreferrer">在新窗口打开</a>
               </Box>
               <Box sx={{ border:'1px solid', borderColor:'divider', borderRadius:1, overflow:'hidden' }}>
-                <img alt="票据" src={`${import.meta.env.VITE_API_URL}${receiptPurchase.receipt_path}`} style={{ width:'100%', display:'block' }} />
+                <img alt="票据" src={`${API_URL}${receiptPurchase.receipt_path}`} style={{ width:'100%', display:'block' }} />
               </Box>
             </Box>
           ) : (

@@ -7,6 +7,7 @@ import dayjs from 'dayjs';
 import useAuthStore from '@/auth/AuthStore';
 import { Base, ExpenseCategory } from '@/api/AppDtos';
 import { ApiClient } from '@/api/ApiClient';
+import { API_URL } from '@/config';
 
 export interface ExpenseFormProps {
   initial?: Partial<{
@@ -271,10 +272,10 @@ export default function BaseExpenseForm({ initial, onSubmit, submitting, onCance
             <Box sx={{ mb: 2 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                 <OpenInNewIcon fontSize="small" />
-                <a href={`${import.meta.env.VITE_API_URL}${receiptPath}`} target="_blank" rel="noreferrer">在新窗口打开</a>
+                <a href={`${API_URL}${receiptPath}`} target="_blank" rel="noreferrer">在新窗口打开</a>
               </Box>
               <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
-                <img src={`${import.meta.env.VITE_API_URL}${receiptPath}`} alt="票据" style={{ width: '100%', display: 'block' }} />
+                <img src={`${API_URL}${receiptPath}`} alt="票据" style={{ width: '100%', display: 'block' }} />
               </Box>
             </Box>
           ) : (

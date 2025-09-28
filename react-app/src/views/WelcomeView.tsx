@@ -37,6 +37,7 @@ import {
 } from '@mui/icons-material';
 import useAuthStore from '@/auth/AuthStore';
 import { getValidAccessTokenOrRefresh } from '@/utils/authToken';
+import { API_URL } from '@/config';
 
 /**
  * 系统主页 - 功能导航
@@ -56,7 +57,7 @@ const WelcomeView = () => {
       try {
         setRateLoading(true);
         setRateError('');
-        const apiUrl = import.meta.env.VITE_API_URL;
+        const apiUrl = API_URL;
         const token = await getValidAccessTokenOrRefresh();
         const res = await fetch(`${apiUrl}/api/rate/list`, { headers: { Authorization: token ? `Bearer ${token}` : '' } });
         if (!res.ok) throw new Error(await res.text());

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { API_URL } from '@/config';
 import {
   Box,
   Paper,
@@ -423,10 +424,10 @@ const InventoryManagementView: React.FC = () => {
             <Box sx={{ mb: 2 }}>
               <Box sx={{ display:'flex', alignItems:'center', gap:1, mb:1 }}>
                 <OpenInNewIcon fontSize="small" />
-                <a href={`${import.meta.env.VITE_API_URL}${(receiptReq as any).receipt_path}`} target="_blank" rel="noreferrer">在新窗口打开</a>
+                <a href={`${API_URL}${(receiptReq as any).receipt_path}`} target="_blank" rel="noreferrer">在新窗口打开</a>
               </Box>
               <Box sx={{ border:'1px solid', borderColor:'divider', borderRadius:1, overflow:'hidden' }}>
-                <img alt="票据" src={`${import.meta.env.VITE_API_URL}${(receiptReq as any).receipt_path}`} style={{ width:'100%', display:'block' }} />
+                <img alt="票据" src={`${API_URL}${(receiptReq as any).receipt_path}`} style={{ width:'100%', display:'block' }} />
               </Box>
             </Box>
           ) : (

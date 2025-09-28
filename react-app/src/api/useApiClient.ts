@@ -1,8 +1,9 @@
 import useAuthStore from "@/auth/AuthStore";
+import { API_URL } from "@/config";
 
 function useApiClient() {
     const token  = useAuthStore().token; // Updated!
-    const apiUrl = import.meta.env.VITE_API_URL;
+    const apiUrl = API_URL;
     const invokeMethod = async <T>(
         serviceName: string,
         methodName: string,

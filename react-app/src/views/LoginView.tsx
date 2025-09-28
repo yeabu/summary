@@ -92,7 +92,7 @@ const LoginView = () => {
             inputRef={usernameInputRef}
             fullWidth
             onKeyDown={handleEnterPress}
-            placeholder="请输入用户名 (如: admin 或 agent_1)"
+            placeholder="请输入用户名"
             variant="outlined"
           />
           
@@ -126,17 +126,7 @@ const LoginView = () => {
             {loading ? '登录中...' : '登录'}
           </Button>
 
-          <Box sx={{ mt: 3, p: 2, backgroundColor: 'grey.50', borderRadius: 1, width: '100%' }}>
-            <Typography variant="body2" color="text.secondary" align="center" gutterBottom>
-              测试账户：
-            </Typography>
-            <Typography variant="body2" align="center">
-              管理员： admin / admin123456
-            </Typography>
-            <Typography variant="body2" align="center">
-              基地代理： agent_1 / agent123
-            </Typography>
-          </Box>
+          {/* 移除测试账户说明 */}
         </Stack>
       </Box>
     </AppView>

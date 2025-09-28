@@ -9,6 +9,9 @@ import (
 	"net/http"
 	"os"
 	"strings"
+    "time"
+
+    "golang.org/x/crypto/bcrypt"
 )
 
 func loadEnv() {
@@ -83,6 +86,25 @@ func main() {
     db.DB.Model(&models.ExchangeRate{}).Where("currency = ?", "THB").Count(&cnt)
     if cnt == 0 {
         db.DB.Create(&models.ExchangeRate{Currency: "THB", RateToCNY: 1.0 / 4.47})
+    }
+
+    // Seed default admin user if not exists
+    var userCnt int64
+    db.DB.Model(&models.User{}).Where("name = ?", "admin").Count(&userCnt)
+    if userCnt == 0 {
+        hash, _ := bcrypt.GenerateFromPassword([]byte("admin123456"), bcrypt.DefaultCost)
+        u := models.User{
+            Name:     "admin",
+            Role:     "admin",
+            Password: string(hash),
+            CreatedAt: time.Now(),
+            UpdatedAt: time.Now(),
+        }
+        if err := db.DB.Create(&u).Error; err != nil {
+            log.Println("warn: seed admin user failed:", err)
+        } else {
+            log.Println("seeded default admin user: admin / admin123456")
+        }
     }
 	addr := ":8080"
 	if os.Getenv("PORT") != "" {

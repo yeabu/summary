@@ -18,6 +18,7 @@ import { Delete as DeleteIcon, Edit as EditIcon, ReceiptLong as ReceiptIcon, Clo
 import CameraCaptureDialog from '@/components/CameraCaptureDialog';
 import ImageEditDialog from '@/components/ImageEditDialog';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import { API_URL } from '@/config';
 // 金额/币种展示：列表中仅显示纯数字和币种英文代码
 
 export default function BaseExpenseListView() {
@@ -576,10 +577,10 @@ export default function BaseExpenseListView() {
             <Box sx={{ mb: 2 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                 <OpenInNewIcon fontSize="small" />
-                <a href={`${import.meta.env.VITE_API_URL}${receiptExpense.receipt_path}`} target="_blank" rel="noreferrer">在新窗口打开</a>
+                <a href={`${API_URL}${receiptExpense.receipt_path}`} target="_blank" rel="noreferrer">在新窗口打开</a>
               </Box>
               <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
-                <img src={`${import.meta.env.VITE_API_URL}${receiptExpense.receipt_path}`} alt="票据" style={{ width: '100%', display: 'block' }} />
+                <img src={`${API_URL}${receiptExpense.receipt_path}`} alt="票据" style={{ width: '100%', display: 'block' }} />
               </Box>
             </Box>
           ) : (

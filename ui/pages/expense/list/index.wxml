@@ -9,6 +9,7 @@
         <text class="cell-value">¥{{item.amount}}</text>
         <text class="cell-desc">{{item.date}}</text>
         <button size="mini" bindtap="onEdit" data-id="{{item.id}}">编辑</button>
+        <button size="mini" bindtap="onReceiptAction" data-id="{{item.id}}">票据</button>
         <button size="mini" type="warn" bindtap="onDelete" data-id="{{item.id}}">删除</button>
       </view>
     </view>

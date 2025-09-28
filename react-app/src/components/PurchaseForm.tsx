@@ -30,6 +30,7 @@ import useAuthStore from '@/auth/AuthStore';
 import { SupplierApi, Supplier } from '@/api/SupplierApi';
 import { PurchaseSuggestApi, ProductSuggestion } from '@/api/PurchaseSuggestApi';
 import { useNavigate } from 'react-router-dom';
+import { API_URL } from '@/config';
 
 // 从后端加载全量基地，替代本地静态列表
 
@@ -113,7 +114,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
           const token = await (await import('@/utils/authToken')).getValidAccessTokenOrRefresh();
           const headers: Record<string, string> = { 'Content-Type': 'application/json' };
           if (token) headers['Authorization'] = `Bearer ${token}`;
-          const res2 = await fetch(`${import.meta.env.VITE_API_URL}/api/product/unit-specs?product_id=${productId ?? rec.id}`, { headers });
+          const res2 = await fetch(`${API_URL}/api/product/unit-specs?product_id=${productId ?? rec.id}`, { headers });
           if (res2.ok) {
             const specs = await res2.json() as Array<{ unit: string; kind?: string; is_default?: boolean }>;
             let units = Array.from(new Set(specs.map(s => s.unit))).filter(Boolean);

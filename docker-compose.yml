@@ -41,11 +41,17 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.frontend
+      args:
+        # Inject at build time. Leave empty to use same-origin (recommended behind Nginx proxy)
+        VITE_API_URL: ${VITE_API_URL-}
     image: summary-frontend:latest
     container_name: summary-frontend
     restart: unless-stopped
     depends_on:
       - backend
+    environment:
+      # Runtime override for API base; leave empty for same-origin
+      VITE_API_URL: ${VITE_API_URL-}
     ports:
       - "80:80"
     networks:

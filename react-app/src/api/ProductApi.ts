@@ -1,4 +1,5 @@
 import { getValidAccessTokenOrRefresh } from "../utils/authToken";
+import { API_URL } from "@/config";
 
 export interface ProductItem {
   id: number;
@@ -18,7 +19,7 @@ export interface ProductListResponse {
 }
 
 export class ProductApi {
-  private apiUrl = import.meta.env.VITE_API_URL;
+  private apiUrl = API_URL;
 
   async upsertUnitSpecByName(product_name: string, unit: string, factor_to_base: number, kind: 'purchase' | 'usage' | 'both' = 'both', is_default = false) {
     const token = await getValidAccessTokenOrRefresh();
