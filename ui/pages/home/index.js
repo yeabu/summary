@@ -1,4 +1,5 @@
 Page({
+  onShow(){},
   goPayable() { wx.navigateTo({ url: '/pages/payable/list/index' }); },
   goSupplier() { wx.navigateTo({ url: '/pages/supplier/list/index' }); },
   goProduct() { wx.navigateTo({ url: '/pages/product/list/index' }); },

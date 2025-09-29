@@ -2,4 +2,3 @@
 module.exports = {
   apiBase: 'http://localhost:8080'
 }
-

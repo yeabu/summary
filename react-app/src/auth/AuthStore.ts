@@ -20,6 +20,30 @@ interface AuthState {
   setSession: (token: string | null, user: User | null) => void;
 }
 
+// Bootstrapping: accept token and minimal user info from URL for H5 embedding
+(() => {
+  try {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      const token = p.get('token');
+      if (token) {
+        const role = p.get('role') || 'base_agent';
+        const user_id = Number(p.get('user_id') || '0');
+        const name = p.get('name') || '用户';
+        const bases = (p.get('bases') || '').split(',').filter(Boolean);
+        localStorage.setItem('auth_token', token);
+        localStorage.setItem('auth_user', JSON.stringify({ user_id, name, role, bases }));
+        // 清理 URL 上的敏感参数（可选）
+        try {
+          const url = new URL(window.location.href);
+          ['token','role','user_id','name','bases'].forEach(k=>url.searchParams.delete(k));
+          window.history.replaceState({}, document.title, url.toString());
+        } catch {}
+      }
+    }
+  } catch {}
+})();
+
 const useAuthStore = create<AuthState>((set, get) => ({
   token: localStorage.getItem('auth_token'),
   user: localStorage.getItem('auth_user') ? JSON.parse(localStorage.getItem('auth_user')!) : null,

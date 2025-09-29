@@ -1,15 +1,16 @@
-<view class="card" wx:for="{{items}}" wx:key="id">
+<view class="cu-card" wx:for="{{items}}" wx:key="id">
   <view class="row" style="justify-content: space-between;">
     <view class="col">
-      <text>{{item.orderNumber}}</text>
-      <text class="muted">{{item.supplierName}}</text>
+      <text class="cu-title">{{item.orderNumber}}</text>
+      <text class="cu-subtitle">{{item.supplierName}}</text>
     </view>
     <view class="col" style="align-items:flex-end;">
       <text style="font-weight:600;">¥{{item.totalAmount}}</text>
-      <text class="muted">{{item.purchaseDate}}</text>
+      <text class="cu-subtitle">{{item.purchaseDate}}</text>
       <view>
-        <button size="mini" bindtap="onEdit" data-id="{{item.id}}">编辑</button>
-        <button size="mini" type="warn" bindtap="onDelete" data-id="{{item.id}}">删除</button>
+        <button class="cu-btn plain" size="mini" bindtap="onReceiptAction" data-id="{{item.id}}">票据</button>
+        <button class="cu-btn" size="mini" bindtap="onEdit" data-id="{{item.id}}">编辑</button>
+        <button class="cu-btn danger" size="mini" bindtap="onDelete" data-id="{{item.id}}">删除</button>
       </view>
     </view>
   </view>

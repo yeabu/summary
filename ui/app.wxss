@@ -84,3 +84,4 @@ page { background: #F5F7FB; color: #1F2D3D; font-size: 28rpx; line-height: 1.6; 
 .suggest-item:last-child { border-bottom: 0; }
 .relative { position: relative; }
 .input.small { padding: 18rpx 16rpx; }
+@import "./colorui/main.wxss";

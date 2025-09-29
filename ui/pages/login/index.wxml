@@ -3,16 +3,19 @@
     <image class="logo" src="/assets/jh.png" mode="aspectFit"></image>
     <text class="title">佳慧记账</text>
   </view>
-  <view class="form card">
-    <view class="field">
-      <text class="label">用户名</text>
-      <input class="input" type="text" placeholder="请输入用户名" value="{{name}}" bindinput="onName" confirm-type="next"></input>
+  <view class="cu-form login-form">
+    <view class="cu-form-group">
+      <text class="cu-form-label">用户名</text>
+      <input class="cu-form-control" type="text" placeholder="请输入用户名" value="{{name}}" bindinput="onName" confirm-type="next"/>
+      <block wx:if="{{nameErr}}"><text class="error-text">{{nameErr}}</text></block>
     </view>
-    <view class="field">
-      <text class="label">密码</text>
-      <input class="input" password="true" placeholder="请输入密码" value="{{pwd}}" bindinput="onPwd" confirm-type="done"></input>
+    <view class="cu-form-group">
+      <text class="cu-form-label">密码</text>
+      <input class="cu-form-control" password="true" placeholder="请输入密码" value="{{pwd}}" bindinput="onPwd" confirm-type="done"/>
+      <block wx:if="{{pwdErr}}"><text class="error-text">{{pwdErr}}</text></block>
     </view>
-    <button type="primary" class="btn-primary" bindtap="login" loading="{{loading}}" disabled="{{loading}}">登录</button>
+    <button class="cu-btn info block round login-submit" bindtap="login" loading="{{loading}}" disabled="{{ loading || !name || !pwd }}">登录</button>
+    <view class="forgot-password" bindtap="onForgotPassword">忘记密码？</view>
   </view>
   <view class="footer muted">© {{year}} Banana</view>
 </view>

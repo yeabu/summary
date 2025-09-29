@@ -86,6 +86,13 @@ const UserForm: React.FC<UserFormProps> = ({
     isBaseAgent ? ['captain'] : ['admin', 'base_agent', 'captain', 'factory_manager']
   ), [isBaseAgent]);
 
+  const effectiveRole = useMemo(() => {
+    if (formData.role && roleOptions.includes(formData.role)) {
+      return formData.role;
+    }
+    return (roleOptions[0] as User['role'] | undefined) || '';
+  }, [formData.role, roleOptions]);
+
   // 加载可用基地列表
   useEffect(() => {
     const loadBases = async () => {
@@ -142,6 +149,19 @@ const UserForm: React.FC<UserFormProps> = ({
     setSubmitError('');
     setShowPassword(false);
   }, [initial, open, roleOptions]);
+
+  useEffect(() => {
+    if (!effectiveRole || formData.role === effectiveRole) {
+      return;
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      role: effectiveRole as User['role'],
+      bases: effectiveRole === 'admin' ? [] : prev.bases,
+      base_ids: effectiveRole === 'admin' ? [] : prev.base_ids
+    }));
+  }, [effectiveRole, formData.role]);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -214,13 +234,18 @@ const UserForm: React.FC<UserFormProps> = ({
   };
 
   const handleRoleChange = (role: string) => {
+    const nextRole = role as User['role'];
     setFormData(prev => ({
       ...prev,
-      role: role as User['role'],
-      bases: role === 'admin' ? [] : prev.bases // 管理员清空基地
+      role: nextRole,
+      bases: nextRole === 'admin' ? [] : prev.bases, // 管理员清空基地
+      base_ids: nextRole === 'admin' ? [] : prev.base_ids
     }));
     if (errors.role) {
       setErrors(prev => ({ ...prev, role: '' }));
+    }
+    if (nextRole === 'admin' && errors.bases) {
+      setErrors(prev => ({ ...prev, bases: '' }));
     }
   };
 
@@ -228,7 +253,8 @@ const UserForm: React.FC<UserFormProps> = ({
   const handleBaseChange = (baseNames: string[]) => {
     // 根据基地名称找到对应的基地对象
     const selectedBases = allBases.filter(base => baseNames.includes(base.name));
-    setFormData(prev => ({ ...prev, bases: selectedBases }));
+    const selectedBaseIds = selectedBases.map(base => base.id).filter((id): id is number => id !== undefined);
+    setFormData(prev => ({ ...prev, bases: selectedBases, base_ids: selectedBaseIds }));
     if (errors.bases) {
       setErrors(prev => ({ ...prev, bases: '' }));
     }
@@ -288,20 +314,21 @@ const UserForm: React.FC<UserFormProps> = ({
               <FormControl fullWidth required error={!!errors.role}>
                 <InputLabel>用户角色</InputLabel>
                 <Select
-                  value={(roleOptions.includes(formData.role || '') ? formData.role : (roleOptions[0] as User['role'])) || ''}
+                  value={effectiveRole}
                   label="用户角色"
                   onChange={(e) => handleRoleChange(e.target.value)}
-                  disabled={submitting}
+                  disabled={submitting || roleOptions.length === 0}
                 >
-                  {isBaseAgent ? (
-                    <MenuItem value="captain">队长</MenuItem>
+                  {roleOptions.length === 0 ? (
+                    <MenuItem value="" disabled>
+                      暂无可选角色
+                    </MenuItem>
                   ) : (
-                    <>
-                      <MenuItem value="admin">管理员</MenuItem>
-                      <MenuItem value="base_agent">基地代理</MenuItem>
-                      <MenuItem value="captain">队长</MenuItem>
-                      <MenuItem value="factory_manager">厂长</MenuItem>
-                    </>
+                    roleOptions.map((role) => (
+                      <MenuItem key={role} value={role}>
+                        {getRoleLabel(role)}
+                      </MenuItem>
+                    ))
                   )}
                 </Select>
                 {errors.role && (

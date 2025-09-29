@@ -24,4 +24,3 @@ Page({
     }catch(e){ wx.showToast({ title: '统计失败', icon: 'none' }); }
   }
 });
-

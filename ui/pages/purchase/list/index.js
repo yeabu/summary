@@ -30,7 +30,8 @@ Page({
         orderNumber: it.order_number || it.orderNumber,
         supplierName: (typeof it.supplier === 'object' && it.supplier) ? (it.supplier.name || '') : (it.supplier || ''),
         totalAmount: it.total_amount != null ? it.total_amount : it.totalAmount,
-        purchaseDate: it.purchase_date || it.purchaseDate
+        purchaseDate: it.purchase_date || it.purchaseDate,
+        receipt_path: it.receipt_path || ''
       }));
       const bases = Array.isArray(blist) ? blist : (blist.records || blist || []);
       const baseNames = bases.map(b=>b.name);
@@ -108,4 +109,45 @@ Page({
   },
   onEdit(e){ const id=e.currentTarget.dataset.id; const cur=this.data.items.find(x=>x.id===id); if(!cur)return; const bi=Math.max(0,this.data.baseNames.indexOf(cur.baseName||'')); const si=Math.max(0,this.data.supplierNames.indexOf(cur.supplierName||'')); this.setData({ formOpen:true, form:{ id:id, order_number:cur.orderNumber, purchase_date:cur.purchaseDate, base_id:(this.data.bases[bi]&&this.data.bases[bi].id)||'', supplier_id:(this.data.suppliers[si]&&this.data.suppliers[si].id)||'', receiver:'', total_amount:cur.totalAmount, items:[{ product_name:'', quantity:'', unit_price:'', amount:0 }] }, baseIndex:bi, supplierIndex:si }); },
   onDelete(e){ const id=e.currentTarget.dataset.id; wx.showModal({ title:'确认删除', content:'删除后不可恢复', confirmText:'删除', success: async (r)=>{ if(r.confirm){ try{ await req.del('/api/purchase/delete?id='+id); await this.onShow(); wx.showToast({ title:'已删除' }); }catch(err){ wx.showToast({ title:'删除失败', icon:'none' }); } } } }); }
+  ,
+  async onReceiptAction(e){
+    const id = e.currentTarget.dataset.id;
+    const item = this.data.items.find(x=>x.id===id);
+    if(!item) return;
+    const hasReceipt = !!item.receipt_path;
+    const actions = hasReceipt ? ['查看票据','上传/更换'] : ['上传票据'];
+    try{
+      const { tapIndex } = await wx.showActionSheet({ itemList: actions });
+      if (hasReceipt && tapIndex === 0) {
+        this.viewReceipt(item);
+      } else {
+        await this.chooseAndUploadReceipt(item);
+      }
+    }catch(err){ /* canceled */ }
+  },
+  viewReceipt(item){
+    if(!item.receipt_path){ wx.showToast({ title:'暂无票据', icon:'none' }); return; }
+    const { apiBase } = require('../../../config');
+    const url = apiBase + item.receipt_path;
+    wx.previewImage({ urls:[url] });
+  },
+  async chooseAndUploadReceipt(item){
+    try{
+      const choose = await wx.chooseImage({ count:1, sizeType:['compressed'], sourceType:['album','camera'] });
+      const filePath = choose.tempFilePaths[0];
+      wx.showLoading({ title:'上传中', mask:true });
+      const resp = await req.upload('/api/purchase/upload-receipt', filePath, { purchase_id: item.id, date: (item.purchaseDate||'').slice(0,10) });
+      wx.hideLoading();
+      if(resp && resp.path){
+        const items = this.data.items.map(it => it.id===item.id ? { ...it, receipt_path: resp.path } : it);
+        this.setData({ items });
+        wx.showToast({ title:'已上传', icon:'success' });
+      } else {
+        wx.showToast({ title:'上传失败', icon:'none' });
+      }
+    }catch(err){
+      wx.hideLoading();
+      wx.showToast({ title:'上传失败', icon:'none' });
+    }
+  }
 });
