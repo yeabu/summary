@@ -1,11 +1,19 @@
 const req = require('../../../utils/request');
-const { makeFabStyle } = require('../../../utils/theme');
+const theme = require('../../../utils/theme');
+const { canAccess } = require('../../../utils/role');
 
 Page({
-  data: { id: '', item: { supplierName:'', baseName:'', total:0, paid:0, remaining:0, status:'', dueDate:'' }, payments: [], links: [], payOpen:false, payForm:{ payable_record_id:'', payment_amount:'', payment_date:'', payment_method:'bank_transfer', reference_number:'', notes:'' }, methodRange:['现金','银行转账','支票','其他'], methodMap:['cash','bank_transfer','check','other'], methodIndex:1, saving:false, sortKeyOptions:['日期','金额'], sortKeyIndex:0, sortOrderOptions:['降序','升序'], sortOrderIndex:0, fabStyle:'' },
+  data: { id: '', item: { supplierName:'', baseName:'', total:0, paid:0, remaining:0, status:'', dueDate:'' }, payments: [], links: [], payOpen:false, payForm:{ payable_record_id:'', payment_amount:'', payment_date:'', payment_method:'bank_transfer', reference_number:'', notes:'' }, methodRange:['现金','银行转账','支票','其他'], methodMap:['cash','bank_transfer','check','other'], methodIndex:1, saving:false, sortKeyOptions:['日期','金额'], sortKeyIndex:0, sortOrderOptions:['降序','升序'], sortOrderIndex:0, fabStyle:'', themeColor:'#B4282D' },
   onLoad(options){ this.setData({ id: options.id || '' }); },
   async onShow(){
-    this.setData({ fabStyle: makeFabStyle(getApp().globalData.themeColor) });
+    const role = (getApp().globalData && getApp().globalData.role) ? getApp().globalData.role : (wx.getStorageSync('role') || '');
+    if (!canAccess(role, ['admin'])) {
+      wx.showToast({ title: '无权限访问', icon: 'none' });
+      setTimeout(() => { wx.navigateBack({ delta: 1 }); }, 600);
+      return;
+    }
+    const themeColor = theme.getThemeColor();
+    this.setData({ themeColor, fabStyle: theme.makeFabStyle(themeColor) });
     if(!this.data.id){ wx.showToast({ title:'缺少ID', icon:'none' }); return; }
     try{
       const d = await req.get('/api/payable/detail?id='+this.data.id);

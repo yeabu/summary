@@ -1,8 +1,9 @@
+<view class="page">
 <view class="card" wx:for="{{items}}" wx:key="id">
   <view class="row" style="justify-content: space-between;">
     <view class="col">
       <text>{{item.name}}</text>
-      <text class="muted">{{item.role}}</text>
+      <text class="muted">{{item.roleLabel}}</text>
     </view>
     <view class="col" style="align-items:flex-end;">
       <text class="muted">{{item.baseNames}}</text>
@@ -31,7 +32,9 @@
       <view class="cell"><text class="cell-title">用户名</text><input class="input" value="{{form.name}}" bindinput="iName"/></view>
       <view class="cell">
         <text class="cell-title">角色</text>
-        <picker mode="selector" range="{{roleRange}}" value="{{roleIndex}}" bindchange="onRole"><view class="picker">{{roleRange[roleIndex]}}</view></picker>
+        <picker mode="selector" range="{{roleOptions}}" range-key="label" value="{{roleIndex}}" bindchange="onRole">
+          <view class="picker">{{roleOptions[roleIndex] ? roleOptions[roleIndex].label : ''}}</view>
+        </picker>
       </view>
       <view class="cell" wx:if="{{!form.id}}"><text class="cell-title">密码</text><input class="input" password="true" value="{{form.password}}" bindinput="iPwd"/></view>
     </view>
@@ -47,6 +50,8 @@
       </view>
     </view>
     <view class="spacer"></view>
-    <button class="btn-primary" bindtap="save" loading="{{saving}}">保存</button>
+    <button class="btn-primary" style="background: {{themeColor}}; border-color: {{themeColor}};" bindtap="save" loading="{{saving}}">保存</button>
   </view>
 </view>
+</view>
+<bottom-nav active="mine" />

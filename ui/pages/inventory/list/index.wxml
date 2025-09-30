@@ -1,0 +1,32 @@
+<view class="page">
+  <view class="search-card">
+    <input class="search-input" placeholder="搜索商品、规格" value="{{q}}" bindinput="onSearchInput" confirm-type="search" bindconfirm="onSearchConfirm" />
+    <button class="btn-primary search-btn" style="background: {{themeColor}}; border-color: {{themeColor}};" size="mini" bindtap="onSearchConfirm">查询</button>
+    <button class="clear-btn" wx:if="{{q}}" size="mini" bindtap="onClearSearch">重置</button>
+  </view>
+
+  <block wx:if="{{loading}}">
+    <view class="empty">正在加载库存...</view>
+  </block>
+  <block wx:elif="{{!list.length}}">
+    <view class="empty">暂无库存数据</view>
+  </block>
+  <block wx:else>
+    <view class="inventory-list">
+      <view class="inventory-item" wx:for="{{list}}" wx:key="key">
+        <view class="item-header">
+          <text class="item-name">{{item.name}}</text>
+          <text class="item-qty" style="color: {{themeColor}};">{{item.stockText}}</text>
+        </view>
+        <view class="item-row">
+          <text class="item-spec">规格：{{item.spec || '—'}}</text>
+          <text class="item-unit">单位：{{item.unit || '—'}}</text>
+        </view>
+        <view class="item-row">
+          <text class="item-price">单价：{{item.unitPriceText}} {{item.currency || 'CNY'}}</text>
+          <text class="item-supplier">供应商：{{item.supplier || '—'}}</text>
+        </view>
+      </view>
+    </view>
+  </block>
+</view>

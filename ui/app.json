@@ -3,7 +3,9 @@
   "pages": [
     "pages/login/index",
     "pages/home/index",
+    "pages/calendar/index",
     "pages/expense/list/index",
+    "pages/inventory/list/index",
     "pages/purchase/list/index",
     "pages/stats/index",
     "pages/mine/index",
@@ -11,6 +13,7 @@
     "pages/payable/detail/index",
     "pages/supplier/list/index",
     "pages/product/list/index",
+    "pages/requisition/list/index",
     "pages/base/list/index",
     "pages/user/list/index",
     "pages/category/list/index"
@@ -36,18 +39,15 @@
         "text": "开支"
       },
       {
-        "pagePath": "pages/purchase/list/index",
-        "text": "采购"
-      },
-      {
-        "pagePath": "pages/stats/index",
-        "text": "统计"
+        "pagePath": "pages/inventory/list/index",
+        "text": "库存"
       },
       {
         "pagePath": "pages/mine/index",
         "text": "我的"
       }
-    ]
+    ],
+    "custom": true
   },
   "sitemapLocation": "sitemap.json",
   "style": "v2"

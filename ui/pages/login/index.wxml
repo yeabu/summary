@@ -1,7 +1,7 @@
 <view class="login-page">
   <view class="brand">
     <image class="logo" src="/assets/jh.png" mode="aspectFit"></image>
-    <text class="title">佳慧记账</text>
+    <text class="title">佳惠记账</text>
   </view>
   <view class="cu-form login-form">
     <view class="cu-form-group">

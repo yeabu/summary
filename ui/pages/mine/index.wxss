@@ -2,3 +2,7 @@
 .col{ display:flex; flex-direction:column; }
 .muted{ color:#9aa1a9; }
 .input{ background:#f7f8fa; border:1rpx solid #e5e6eb; border-radius: 8rpx; padding: 20rpx; }
+.theme-options { gap: 12rpx; flex-wrap: wrap; }
+.theme-dot { width: 48rpx; height: 48rpx; border-radius: 50%; border: 2rpx solid #eee; transition: transform .15s ease, box-shadow .15s ease; }
+.theme-dot.active { border-color: #333333; box-shadow: 0 0 0 6rpx rgba(0,0,0,0.08); transform: scale(1.05); }
+

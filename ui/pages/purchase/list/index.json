@@ -1,4 +1,7 @@
 {
   "navigationBarTitleText": "采购记录",
-  "enablePullDownRefresh": true
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "bottom-nav": "/components/bottom-nav/index"
+  }
 }

@@ -1,3 +1,4 @@
+<view class="page">
 <block wx:if="{{items && items.length}}">
   <view class="cell-group">
     <view class="cell" wx:for="{{items}}" wx:key="id">
@@ -6,7 +7,7 @@
         <text class="cell-desc">{{item.contact_person || ''}} {{item.phone || ''}}</text>
       </view>
       <view class="row" style="gap: 12rpx; align-items:center;">
-        <text class="cell-value">{{item.settlement_type || ''}}</text>
+        <text class="cell-value">{{item.settlement_label || ''}}</text>
         <button size="mini" bindtap="onEdit" data-id="{{item.id}}">编辑</button>
         <button size="mini" type="warn" bindtap="onDelete" data-id="{{item.id}}">删除</button>
       </view>
@@ -47,6 +48,8 @@
       <view class="cell" wx:if="{{form.settlement_type=='monthly'}}"><text class="cell-title">月结日</text><input class="input" type="number" value="{{form.settlement_day}}" bindinput="iDay"/></view>
     </view>
     <view class="spacer"></view>
-    <button class="btn-primary" bindtap="save" loading="{{saving}}">保存</button>
+    <button class="btn-primary" style="background: {{themeColor}}; border-color: {{themeColor}};" bindtap="save" loading="{{saving}}">保存</button>
   </view>
 </view>
+</view>
+<bottom-nav active="inventory" />

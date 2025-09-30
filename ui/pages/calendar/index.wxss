@@ -1,0 +1,215 @@
+.page {
+  min-height: 100vh;
+  padding: 24rpx;
+  background: #f5f6f7;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.calendar-card,
+.list-card {
+  background: #ffffff;
+  border-radius: 20rpx;
+  padding: 24rpx;
+  box-shadow: 0 16rpx 32rpx rgba(0, 0, 0, 0.04);
+}
+
+.calendar-header {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.calendar-header .month {
+  flex: 1;
+  text-align: center;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1f2d3d;
+}
+
+.nav-btn {
+  min-width: 64rpx;
+}
+
+.today-btn {
+  margin-left: auto;
+}
+
+.summary {
+  display: flex;
+  justify-content: flex-end;
+  gap: 24rpx;
+  font-size: 24rpx;
+  color: #7a8c99;
+  margin-bottom: 12rpx;
+}
+
+.weekdays,
+.week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8rpx;
+}
+
+.weekday {
+  text-align: center;
+  font-size: 24rpx;
+  color: #7a8c99;
+}
+
+.day {
+  position: relative;
+  height: 92rpx;
+  border-radius: 14rpx;
+  background: #f7f9fb;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #1f2d3d;
+  transition: all 0.2s ease;
+}
+
+.day.today {
+  border: 2rpx solid #b4282d;
+}
+
+.day.dim {
+  opacity: 0.35;
+}
+
+.day-num {
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.badge {
+  position: absolute;
+  right: 8rpx;
+  top: 8rpx;
+  min-width: 32rpx;
+  padding: 0 6rpx;
+  height: 32rpx;
+  border-radius: 16rpx;
+  background: rgba(255, 255, 255, 0.9);
+  color: #b4282d;
+  font-size: 20rpx;
+  line-height: 32rpx;
+  text-align: center;
+  font-weight: 600;
+}
+
+.list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16rpx;
+  color: #1f2d3d;
+}
+
+.list-date {
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.list-count {
+  font-size: 24rpx;
+  color: #7a8c99;
+}
+
+.record {
+  border: 2rpx solid #f0f4f8;
+  border-radius: 16rpx;
+  padding: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.record:last-child {
+  margin-bottom: 0;
+}
+
+.record-top {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-bottom: 8rpx;
+}
+
+.tag {
+  font-size: 20rpx;
+  padding: 4rpx 12rpx;
+  border-radius: 20rpx;
+  color: #ffffff;
+  background: #b4282d;
+}
+
+.tag.purchase {
+  background: #3d7ff9;
+}
+
+.title {
+  flex: 1;
+  font-size: 28rpx;
+  color: #1f2d3d;
+}
+
+.amount {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #1f2d3d;
+}
+
+.record-sub,
+.record-detail {
+  font-size: 24rpx;
+  color: #5c6b77;
+}
+
+.record-detail {
+  margin-top: 4rpx;
+}
+
+.empty {
+  padding: 40rpx 0;
+  text-align: center;
+  color: #9aa6b2;
+  font-size: 24rpx;
+}
+
+@media (prefers-color-scheme: dark) {
+  .page {
+    background: #111827;
+  }
+  .calendar-card,
+  .list-card {
+    background: #1f2937;
+    box-shadow: 0 16rpx 32rpx rgba(0, 0, 0, 0.4);
+  }
+  .day {
+    background: #293548;
+    color: #f9fafb;
+  }
+  .badge {
+    background: rgba(180, 40, 45, 0.85);
+    color: #ffffff;
+  }
+  .record {
+    border-color: #2d3a4f;
+  }
+  .title,
+  .amount,
+  .list-date {
+    color: #f9fafb;
+  }
+  .record-sub,
+  .record-detail,
+  .summary,
+  .list-count,
+  .weekday {
+    color: #94a3b8;
+  }
+}

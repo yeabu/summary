@@ -1,8 +1,26 @@
-<view class="grid">
-  <view class="tile" bindtap="goPayable">应付款管理</view>
-  <view class="tile" bindtap="goSupplier">供应商管理</view>
-  <view class="tile" bindtap="goProduct">商品管理</view>
-  <view class="tile" bindtap="goBase">基地管理</view>
-  <view class="tile" bindtap="goUser">人员管理</view>
-  <view class="tile" bindtap="goCategory">类别管理</view>
+<view class="home">
+  <view class="welcome-card" style="{{welcomeStyle}}">
+    <view class="welcome-title">欢迎回来，{{welcomeName}}</view>
+    <view class="welcome-subtitle">佳慧记账已为您准备好各模块的快捷入口</view>
+  </view>
+
+  <view class="grid">
+    <view
+      class="tile"
+      wx:for="{{tiles}}"
+      wx:key="key"
+      style="{{item.background}}"
+      data-url="{{item.url}}"
+      data-type="{{item.type}}"
+      bindtap="onTileTap"
+    >
+      <view class="tile-icon" style="background-color: {{tileIconColor}}; -webkit-mask-image: url({{item.icon}}); mask-image: url({{item.icon}});"></view>
+      <text class="tile-label">{{item.label}}</text>
+    </view>
+  </view>
+
+  <view class="notice-card" style="{{noticeStyle}}">
+    <text class="notice-title">注意：</text>
+    <text class="notice-text">系统默认将老挝币（LAK）金额按照“万”为单位展示，请录入与核对时留意换算。</text>
+  </view>
 </view>

@@ -1,12 +1,36 @@
 const req = require('../../../utils/request');
-const { makeFabStyle } = require('../../../utils/theme');
+const theme = require('../../../utils/theme');
+const { canAccess } = require('../../../utils/role');
+
+const SETTLE_OPTIONS = [
+  { value: 'immediate', label: '即付' },
+  { value: 'monthly', label: '月结' },
+  { value: 'flexible', label: '灵活' }
+];
+
+function getSettleLabel(value) {
+  const opt = SETTLE_OPTIONS.find(o => o.value === value);
+  return opt ? opt.label : value || '';
+}
 Page({
-  data: { items: [], loading: true, formOpen: false, form: { name:'', settlement_type:'flexible' }, settleRange:['即付','月结','灵活'], settleIndex:2, saving:false, fabStyle:'' },
+  data: { items: [], loading: true, formOpen: false, form: { name:'', settlement_type:'flexible' }, settleOptions: SETTLE_OPTIONS, settleRange: SETTLE_OPTIONS.map(o=>o.label), settleIndex:2, saving:false, fabStyle:'', themeColor:'#B4282D' },
   async onShow() {
-    this.setData({ loading: true, fabStyle: makeFabStyle(getApp().globalData.themeColor) });
+    const role = (getApp().globalData && getApp().globalData.role) ? getApp().globalData.role : (wx.getStorageSync('role') || '');
+    if (!canAccess(role, ['admin'])) {
+      wx.showToast({ title: '无权限访问', icon: 'none' });
+      setTimeout(() => { wx.switchTab({ url: '/pages/home/index' }); }, 600);
+      this.setData({ loading: false });
+      return;
+    }
+    const themeColor = theme.getThemeColor();
+    this.setData({ loading: true, themeColor, fabStyle: theme.makeFabStyle(themeColor) });
     try {
       const data = await req.get('/api/supplier/list', { page: 1, limit: 50 });
-      this.setData({ items: data.records || [] });
+      const items = (data.records || []).map(item => ({
+        ...item,
+        settlement_label: getSettleLabel(item.settlement_type)
+      }));
+      this.setData({ items });
     } catch (e) {
       wx.showToast({ title: '加载失败', icon: 'none' });
     } finally {
@@ -27,7 +51,11 @@ Page({
   iPhone(e){ this.setData({ 'form.phone': e.detail.value }); },
   iEmail(e){ this.setData({ 'form.email': e.detail.value }); },
   iAddress(e){ this.setData({ 'form.address': e.detail.value }); },
-  onSettle(e){ const i=Number(e.detail.value); const map=['immediate','monthly','flexible']; this.setData({ settleIndex:i, 'form.settlement_type': map[i] }); },
+  onSettle(e){
+    const i=Number(e.detail.value);
+    const option = this.data.settleOptions[i];
+    this.setData({ settleIndex:i, 'form.settlement_type': option ? option.value : this.data.form.settlement_type });
+  },
   iDay(e){ this.setData({ 'form.settlement_day': Number(e.detail.value) }); },
   async save(){
     if(!this.data.form.name){ wx.showToast({ title:'请输入名称', icon:'none' }); return; }

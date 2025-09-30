@@ -1,8 +1,15 @@
 const req = require('../../utils/request');
+const { canAccess } = require('../../utils/role');
 
 Page({
   data: { start: '', end: '', totalExpense: 0, totalPurchase: 0, expenseByBase: [] },
   onShow(){
+    const role = (getApp().globalData && getApp().globalData.role) ? getApp().globalData.role : (wx.getStorageSync('role') || '');
+    if (!canAccess(role, ['admin'])) {
+      wx.showToast({ title: '无权限访问', icon: 'none' });
+      setTimeout(() => { wx.switchTab({ url: '/pages/home/index' }); }, 600);
+      return;
+    }
     const t=new Date();
     const start=new Date(t.getFullYear(), t.getMonth(), 1).toISOString().slice(0,10);
     const end=new Date(t.getFullYear(), t.getMonth()+1, 0).toISOString().slice(0,10);

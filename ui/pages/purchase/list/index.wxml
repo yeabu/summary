@@ -1,92 +1,115 @@
-<view class="cu-card" wx:for="{{items}}" wx:key="id">
-  <view class="row" style="justify-content: space-between;">
-    <view class="col">
-      <text class="cu-title">{{item.orderNumber}}</text>
-      <text class="cu-subtitle">{{item.supplierName}}</text>
-    </view>
-    <view class="col" style="align-items:flex-end;">
-      <text style="font-weight:600;">¥{{item.totalAmount}}</text>
-      <text class="cu-subtitle">{{item.purchaseDate}}</text>
-      <view>
-        <button class="cu-btn plain" size="mini" bindtap="onReceiptAction" data-id="{{item.id}}">票据</button>
-        <button class="cu-btn" size="mini" bindtap="onEdit" data-id="{{item.id}}">编辑</button>
-        <button class="cu-btn danger" size="mini" bindtap="onDelete" data-id="{{item.id}}">删除</button>
-      </view>
-    </view>
-  </view>
-</view>
-
-<view class="fab" bindtap="openCreate" style="{{fabStyle}}">
-  <view class="fab-inner">
-    <view class="fab-bar"></view>
-    <view class="fab-bar v"></view>
-  </view>
-  </view>
-
-<view class="sheet" wx:if="{{formOpen}}">
-  <view class="sheet-body">
-    <view class="row" style="justify-content: space-between; align-items:center;">
-      <text style="font-weight:600;">{{form.id ? (i18n.editPurchase || '编辑采购') : (i18n.newPurchase || '新增采购')}}</text>
-      <button size="mini" bindtap="closeForm">关闭</button>
-    </view>
-    <view class="group-title">{{i18n.basicInfo || '基本信息'}}</view>
-    <view class="cell-group">
-      <view class="cell" style="flex-direction: column; align-items: stretch;">
-        <text class="cell-title"><text class="required-star">*</text>{{i18n.orderNumber || '订单号'}}</text>
-        <input class="input {{errors.order_number ? 'is-error' : ''}}" value="{{form.order_number}}" bindinput="iOrder"/>
-        <block wx:if="{{errors.order_number}}"><text class="error-text">{{errors.order_number}}</text></block>
-      </view>
-      <view class="cell" style="flex-direction: column; align-items: stretch;">
-        <text class="cell-title"><text class="required-star">*</text>{{i18n.date || '日期'}}</text>
-        <picker mode="date" value="{{form.purchase_date}}" bindchange="onDate"><view class="picker {{errors.purchase_date ? 'is-error' : ''}}">{{form.purchase_date || (i18n.selectDate || '选择日期')}}</view></picker>
-        <block wx:if="{{errors.purchase_date}}"><text class="error-text">{{errors.purchase_date}}</text></block>
-      </view>
-      <view class="cell" style="flex-direction: column; align-items: stretch;">
-        <text class="cell-title"><text class="required-star">*</text>{{i18n.base || '基地'}}</text>
-        <picker mode="selector" range="{{baseNames}}" value="{{baseIndex}}" bindchange="onBase"><view class="picker {{errors.base_id ? 'is-error' : ''}}">{{baseNames[baseIndex]}}</view></picker>
-        <block wx:if="{{errors.base_id}}"><text class="error-text">{{errors.base_id}}</text></block>
-      </view>
-      <view class="cell" style="flex-direction: column; align-items: stretch;">
-        <text class="cell-title"><text class="required-star">*</text>{{i18n.supplier || '供应商'}}</text>
-        <picker mode="selector" range="{{supplierNames}}" value="{{supplierIndex}}" bindchange="onSupplier"><view class="picker {{errors.supplier_id ? 'is-error' : ''}}">{{supplierNames[supplierIndex]}}</view></picker>
-        <block wx:if="{{errors.supplier_id}}"><text class="error-text">{{errors.supplier_id}}</text></block>
-      </view>
-      <view class="cell" style="flex-direction: column; align-items: stretch;">
-        <text class="cell-title">{{i18n.receiver || '收货人'}}</text>
-        <input class="input" value="{{form.receiver}}" bindinput="iReceiver"/>
-      </view>
-      <view class="cell" style="flex-direction: column; align-items: stretch;">
-        <text class="cell-title">{{i18n.total || '合计'}}</text>
-        <input class="input" type="number" value="{{form.total_amount}}" bindinput="iTotal"/>
-      </view>
-    </view>
-
-    <view class="group-title">{{i18n.detailInfo || '明细信息'}}</view>
-    <view class="cell-group">
-      <view class="cell" style="flex-direction: column; align-items: stretch;">
-        <text class="cell-title">{{i18n.detail || '明细'}}</text>
-        <view wx:for="{{form.items}}" wx:key="index" class="detail-row">
-          <view class="col-name relative">
-            <input class="input {{errors.items[index] && errors.items[index].product_name ? 'is-error' : ''}}" placeholder="{{i18n.productName || '商品名称'}}" value="{{item.product_name}}" data-index="{{index}}" bindinput="iItemName" bindfocus="onNameFocus" bindblur="onNameBlur"/>
-            <block wx:if="{{activeSuggestIndex===index && suggestList.length>0}}">
-              <view class="suggest">
-                <view class="suggest-item" wx:for="{{suggestList}}" wx:key="name" wx:for-index="sidx" wx:for-item="opt" data-name="{{opt.name}}" data-price="{{opt.unit_price}}" data-index="{{index}}" bindtap="chooseProduct">{{opt.name}}</view>
-              </view>
-            </block>
-          </view>
-          <view class="col-qty">
-            <input class="input small {{errors.items[index] && errors.items[index].quantity ? 'is-error' : ''}}" type="number" placeholder="{{i18n.quantity || '数量'}}" value="{{item.quantity}}" data-index="{{index}}" bindinput="iItemQty"/>
-          </view>
-          <view class="col-price">
-            <input class="input small {{errors.items[index] && errors.items[index].unit_price ? 'is-error' : ''}}" type="number" placeholder="{{i18n.unitPrice || '单价'}}" value="{{item.unit_price}}" data-index="{{index}}" bindinput="iItemPrice"/>
-          </view>
-          <text class="subtotal">¥{{item.amount_fmt || (item.amount || 0)}}</text>
-          <button size="mini" type="warn" data-index="{{index}}" bindtap="removeItem">{{i18n.remove || '移除'}}</button>
+<view class="page">
+  <block wx:if="{{items && items.length}}">
+    <view class="cu-card" wx:for="{{items}}" wx:key="id">
+      <view class="row" style="justify-content: space-between; align-items:center;">
+        <view class="col">
+          <text class="cu-title">{{item.orderNumber}}</text>
+          <text class="cu-subtitle">{{item.supplierName}}</text>
         </view>
-        <button size="mini" class="btn-outline" bindtap="addItem">{{i18n.addDetail || '新增明细'}}</button>
+        <view class="col" style="align-items:flex-end;">
+          <text style="font-weight:600;">{{item.currency}} {{item.totalAmountFmt}}</text>
+          <text class="cu-subtitle">{{item.purchaseDate}}</text>
+          <view>
+            <button class="cu-btn plain" size="mini" bindtap="onReceiptAction" data-id="{{item.id}}">票据</button>
+            <button class="cu-btn" size="mini" bindtap="onEdit" data-id="{{item.id}}">编辑</button>
+            <button class="cu-btn danger" size="mini" bindtap="onDelete" data-id="{{item.id}}">删除</button>
+          </view>
+        </view>
       </view>
     </view>
+  </block>
+  <block wx:else>
+    <view class="empty">暂无采购数据</view>
+  </block>
 
-    <button class="btn-primary" style="background: {{themeColor}}; border-color: {{themeColor}};" bindtap="save" loading="{{saving}}">{{i18n.save || '保存'}}</button>
+  <view class="fab" bindtap="openCreate" style="{{fabStyle}}">
+    <view class="fab-inner">
+      <view class="fab-bar"></view>
+      <view class="fab-bar v"></view>
+    </view>
   </view>
+
+  <view class="sheet" wx:if="{{formOpen}}">
+    <view class="sheet-body">
+      <view class="row" style="justify-content: space-between; align-items:center;">
+        <text style="font-weight:600;">{{form.id ? (i18n.editPurchase || '编辑采购') : (i18n.newPurchase || '新增采购')}}</text>
+        <button size="mini" bindtap="closeForm">关闭</button>
+      </view>
+      <scroll-view scroll-y class="sheet-scroll">
+        <view class="group-title" style="background: {{themeColor}};">{{i18n.basicInfo || '基本信息'}}</view>
+        <view class="cell-group fixed-grid">
+          <view class="cell">
+            <text class="cell-title"><text class="required-star">*</text>{{i18n.orderNumber || '订单号'}}</text>
+            <input class="input {{errors.order_number ? 'is-error' : ''}}" value="{{form.order_number}}" bindinput="iOrder"/>
+            <block wx:if="{{errors.order_number}}"><text class="error-text">{{errors.order_number}}</text></block>
+          </view>
+          <view class="cell">
+            <text class="cell-title"><text class="required-star">*</text>{{i18n.date || '日期'}}</text>
+            <picker mode="date" value="{{form.purchase_date}}" bindchange="onDate"><view class="picker {{errors.purchase_date ? 'is-error' : ''}}">{{form.purchase_date || (i18n.selectDate || '选择日期')}}</view></picker>
+            <block wx:if="{{errors.purchase_date}}"><text class="error-text">{{errors.purchase_date}}</text></block>
+          </view>
+          <view class="cell">
+            <text class="cell-title"><text class="required-star">*</text>{{i18n.base || '基地'}}</text>
+            <picker mode="selector" range="{{basePickerNames}}" value="{{baseIndex}}" bindchange="onBase"><view class="picker {{errors.base_id ? 'is-error' : ''}}">{{basePickerNames[baseIndex]}}</view></picker>
+            <block wx:if="{{errors.base_id}}"><text class="error-text">{{errors.base_id}}</text></block>
+          </view>
+          <view class="cell">
+            <text class="cell-title"><text class="required-star">*</text>{{i18n.supplier || '供应商'}}</text>
+            <picker mode="selector" range="{{supplierPickerNames}}" value="{{supplierIndex}}" bindchange="onSupplier"><view class="picker {{errors.supplier_id ? 'is-error' : ''}}">{{supplierPickerNames[supplierIndex]}}</view></picker>
+            <block wx:if="{{errors.supplier_id}}"><text class="error-text">{{errors.supplier_id}}</text></block>
+          </view>
+          <view class="cell">
+            <text class="cell-title">{{i18n.receiver || '收货人'}}</text>
+            <input class="input" value="{{form.receiver}}" bindinput="iReceiver"/>
+          </view>
+          <view class="cell" style="grid-column: span 2;">
+            <text class="cell-title">{{i18n.remark || '备注'}}</text>
+            <textarea class="input textarea" auto-height value="{{form.remark}}" placeholder="请输入备注" bindinput="iRemark"></textarea>
+          </view>
+        </view>
+
+        <view class="section-spacer"></view>
+        <view class="group-title" style="background: {{themeColor}};">{{i18n.detailInfo || '明细信息'}}</view>
+        <view class="cell-group detail-settings">
+          <view class="cell">
+            <text class="cell-title">币种</text>
+            <picker mode="selector" range="{{currencyLabels}}" value="{{currencyIndex}}" bindchange="onCurrency"><view class="picker">{{currencyLabels[currencyIndex]}}</view></picker>
+          </view>
+        </view>
+        <view class="cell-group">
+          <view class="cell" style="flex-direction: column; align-items: stretch; gap: 16rpx;">
+            <view wx:for="{{form.items}}" wx:key="index" class="detail-row">
+              <view class="detail-block">
+                <text class="cell-title">{{i18n.productName || '商品名称'}}</text>
+                <picker mode="selector" range="{{productPickerList}}" range-key="name" value="{{item.product_picker_index || 0}}" data-index="{{index}}" bindchange="onProductPick">
+                  <view class="picker input {{errors.items[index] && errors.items[index].product_name ? 'is-error' : ''}}">{{item.product_name || (productPickerList[item.product_picker_index || 0] && productPickerList[item.product_picker_index || 0].name) || '请选择商品'}}</view>
+                </picker>
+              </view>
+              <view class="detail-columns">
+                <view class="detail-column">
+                  <text class="cell-title">{{i18n.quantity || '数量'}}</text>
+                  <input class="input {{errors.items[index] && errors.items[index].quantity ? 'is-error' : ''}}" type="number" placeholder="{{i18n.quantity || '数量'}}" value="{{item.quantity}}" data-index="{{index}}" bindinput="iItemQty"/>
+                </view>
+                <view class="detail-column">
+                  <text class="cell-title">{{i18n.unitPrice || '单价'}}</text>
+                  <input class="input {{errors.items[index] && errors.items[index].unit_price ? 'is-error' : ''}}" type="number" placeholder="{{i18n.unitPrice || '单价'}}" value="{{item.unit_price}}" data-index="{{index}}" bindinput="iItemPrice"/>
+                </view>
+              </view>
+              <text class="detail-hint" wx:if="{{item.unit_label}}">采购单位：{{item.unit_label}}</text>
+              <view class="detail-footer">
+                <text class="subtotal">{{form.currency}} {{item.amount_fmt || (item.amount || 0)}}</text>
+                <button size="mini" type="warn" data-index="{{index}}" bindtap="removeItem">{{i18n.remove || '移除'}}</button>
+              </view>
+            </view>
+            <button size="mini" class="btn-outline" style="color: {{themeColor}}; border-color: {{themeColor}};" bindtap="addItem">{{i18n.addDetail || '新增明细'}}</button>
+          </view>
+        </view>
+      </scroll-view>
+      <view class="sheet-footer">
+        <button class="btn-primary" style="background: {{themeColor}}; border-color: {{themeColor}};" bindtap="save" loading="{{saving}}">{{i18n.save || '保存'}}</button>
+      </view>
+    </view>
+  </view>
+
+  <bottom-nav active="inventory" />
 </view>

@@ -1,0 +1,20 @@
+<view class="tab-bar">
+  <view class="tab-items">
+    <view
+      class="tab-item"
+      style="color: {{selected === index ? themeColor : '#7a7e83'}};"
+      wx:for="{{list}}"
+      wx:key="pagePath"
+      data-index="{{index}}"
+      data-path="{{item.pagePath}}"
+      bindtap="onSwitch"
+    >
+      <view
+        class="tab-icon"
+        style="background-color: {{selected === index ? themeColor : '#7a7e83'}}; -webkit-mask-image: url({{item.iconPath}}); mask-image: url({{item.iconPath}});"
+      ></view>
+      <text class="tab-text">{{item.text}}</text>
+    </view>
+  </view>
+  <view class="tab-safe" />
+</view>

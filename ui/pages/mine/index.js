@@ -1,11 +1,22 @@
 const req = require('../../utils/request');
+const theme = require('../../utils/theme');
+const { getRoleLabel } = require('../../utils/role');
 
 Page({
-  data: { role: '', oldPwd: '', newPwd: '', loading: false, langs:['中文','English'], langIndex:0 },
+  data: { role: '', roleLabel: '佳慧伙伴', oldPwd: '', newPwd: '', loading: false, langs:['中文','English'], langIndex:0, themeColors: ['#B4282D', '#1C6DD0', '#07C160', '#FFC53D'], themeActiveColor: '#B4282D' },
   onShow(){
-    this.setData({ role: wx.getStorageSync('role') || '' });
-    const lang = (getApp().globalData.lang || 'zh');
-    this.setData({ langIndex: lang==='en' ? 1 : 0 });
+    const app = getApp();
+    const themeColor = theme.getThemeColor();
+    const tabBar = typeof this.getTabBar === 'function' ? this.getTabBar() : null;
+    if (tabBar) {
+      if (typeof tabBar.refreshTabs === 'function') { tabBar.refreshTabs(); }
+      if (typeof tabBar.syncWithRoute === 'function') { tabBar.syncWithRoute(); }
+      if (typeof tabBar.setThemeColor === 'function') { tabBar.setThemeColor(themeColor); }
+    }
+    const role = (app && app.globalData && app.globalData.role) ? app.globalData.role : (wx.getStorageSync('role') || '');
+    const roleLabel = getRoleLabel(role);
+    const lang = (app && app.globalData && app.globalData.lang) ? app.globalData.lang : 'zh';
+    this.setData({ role, roleLabel, langIndex: lang==='en' ? 1 : 0, themeActiveColor: themeColor });
   },
   onOld(e){ this.setData({ oldPwd: e.detail.value }); },
   onNew(e){ this.setData({ newPwd: e.detail.value }); },
@@ -19,7 +30,17 @@ Page({
     }catch(e){ wx.showToast({ title:'修改失败', icon:'none'}); }
     finally{ this.setData({ loading:false }); }
   },
-  logout(){ wx.clearStorageSync(); wx.reLaunch({ url:'/pages/login/index' }); },
+  logout(){ const app = getApp(); wx.clearStorageSync(); if (app && app.globalData){ app.globalData.role = ''; app.globalData.roleLabel = '佳慧伙伴'; } wx.reLaunch({ url:'/pages/login/index' }); },
   onLang(e){ const i=Number(e.detail.value); const lang=i===1?'en':'zh'; getApp().setLang(lang); wx.showToast({ title: '已切换', icon: 'success' }); },
-  setTheme(e){ const color=e.currentTarget.dataset.color; getApp().setThemeColor(color); wx.showToast({ title: '主题已更新', icon: 'success' }); }
+  setTheme(e){
+    const color=e.currentTarget.dataset.color;
+    const app = getApp();
+    app.setThemeColor(color);
+    this.setData({ themeActiveColor: color });
+    const tabBar = typeof this.getTabBar === 'function' ? this.getTabBar() : null;
+    if (tabBar && typeof tabBar.setThemeColor === 'function') {
+      tabBar.setThemeColor(color);
+    }
+    wx.showToast({ title: '主题已更新', icon: 'success' });
+  }
 });

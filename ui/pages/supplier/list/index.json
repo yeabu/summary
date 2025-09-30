@@ -1,4 +1,7 @@
 {
   "navigationBarTitleText": "供应商",
-  "enablePullDownRefresh": true
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "bottom-nav": "/components/bottom-nav/index"
+  }
 }

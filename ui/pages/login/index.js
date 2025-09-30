@@ -1,4 +1,5 @@
 const req = require('../../utils/request');
+const { getRoleLabel } = require('../../utils/role');
 
 Page({
   data: { 
@@ -29,12 +30,18 @@ Page({
     this.setData({ loading: true });
     try {
       const res = await req.post('/api/login', { name: this.data.name, password: this.data.pwd });
+      const role = res.role || '';
+      const roleLabel = getRoleLabel(role);
+      const app = typeof getApp === 'function' ? getApp() : null;
       wx.setStorageSync('token', res.token || '');
-      wx.setStorageSync('role', res.role || '');
+      wx.setStorageSync('role', role);
+      wx.setStorageSync('roleLabel', roleLabel);
       if (res.user_id) wx.setStorageSync('user_id', res.user_id);
       if (Array.isArray(res.bases)) wx.setStorageSync('bases', res.bases);
       wx.setStorageSync('name', this.data.name || '');
-      wx.switchTab({ url: '/pages/home/index' });
+      if (app && app.globalData) { app.globalData.role = role; app.globalData.roleLabel = roleLabel; }
+      wx.showToast({ title: `欢迎${roleLabel}`, icon: 'success', duration: 1200 });
+      setTimeout(() => { wx.switchTab({ url: '/pages/home/index' }); }, 300);
     } catch (e) {
       wx.showToast({ title: '登录失败', icon: 'none' });
     } finally {

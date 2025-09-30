@@ -1,0 +1,57 @@
+<view class="page">
+  <view class="calendar-card">
+    <view class="calendar-header">
+      <button class="nav-btn" size="mini" bindtap="prevMonth">‹</button>
+      <view class="month">{{monthText}}</view>
+      <button class="nav-btn" size="mini" bindtap="nextMonth">›</button>
+      <button class="today-btn" size="mini" bindtap="goToday">今天</button>
+    </view>
+    <view class="summary">
+      <text>开支 {{summary.expenseCount}}</text>
+      <text>申领 {{summary.purchaseCount}}</text>
+    </view>
+    <view class="weekdays">
+      <block wx:for="{{weekDays}}" wx:key="*this">
+        <text class="weekday">{{item}}</text>
+      </block>
+    </view>
+    <block wx:for="{{weeks}}" wx:key="index">
+      <view class="week">
+        <block wx:for="{{item}}" wx:key="date">
+          <view
+            class="day {{item.inMonth ? '' : 'dim'}} {{item.isToday ? 'today' : ''}}"
+            data-date="{{item.date}}"
+            bindtap="onSelectDay"
+            style="{{item.date === selectedDate ? 'background:' + themeColor + ';color:#fff;' : ''}}"
+          >
+            <text class="day-num">{{item.day}}</text>
+            <view wx:if="{{item.total > 0}}" class="badge">{{item.total}}</view>
+          </view>
+        </block>
+      </view>
+    </block>
+  </view>
+
+  <view class="list-card">
+    <view class="list-header">
+      <text class="list-date">{{selectedDate}}</text>
+      <text class="list-count">共 {{selectedRecords.length}} 条</text>
+    </view>
+    <block wx:if="{{selectedRecords.length}}">
+      <block wx:for="{{selectedRecords}}" wx:key="uid">
+        <view class="record">
+          <view class="record-top">
+            <text class="tag {{item.type}}">{{item.typeLabel}}</text>
+            <text class="title">{{item.title}}</text>
+            <text class="amount">{{item.amountText}}</text>
+          </view>
+          <view class="record-sub">
+            <text>{{item.subtitle}}</text>
+          </view>
+          <view wx:if="{{item.detail}}" class="record-detail">{{item.detail}}</view>
+        </view>
+      </block>
+    </block>
+    <view wx:else class="empty">当天暂无个人记录</view>
+  </view>
+</view>

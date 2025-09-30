@@ -6,7 +6,7 @@
         <text class="cell-desc">{{item.categoryName}}</text>
       </view>
       <view class="row" style="gap: 12rpx; align-items:center;">
-        <text class="cell-value">¥{{item.amount}}</text>
+        <text class="cell-value">{{item.currency}} {{item.amount_fmt}}</text>
         <text class="cell-desc">{{item.date}}</text>
         <button size="mini" bindtap="onEdit" data-id="{{item.id}}">编辑</button>
         <button size="mini" bindtap="onReceiptAction" data-id="{{item.id}}">票据</button>
@@ -46,9 +46,15 @@
         <picker mode="selector" range="{{categoryNames}}" value="{{categoryIndex}}" bindchange="onCategory"><view class="picker">{{categoryNames[categoryIndex]}}</view></picker>
       </view>
       <view class="cell"><text class="cell-title">金额</text><input class="input" type="number" value="{{form.amount}}" bindinput="iAmount"/></view>
+      <view class="cell">
+        <text class="cell-title">币种</text>
+        <picker mode="selector" range="{{currencyLabels}}" value="{{currencyIndex}}" bindchange="onCurrency">
+          <view class="picker">{{currencyLabels[currencyIndex]}}</view>
+        </picker>
+      </view>
       <view class="cell"><text class="cell-title">备注</text><input class="input" value="{{form.detail}}" bindinput="iDetail"/></view>
     </view>
     <view class="spacer"></view>
-    <button class="btn-primary" bindtap="save" loading="{{saving}}">保存</button>
+    <button class="btn-primary" style="background: {{themeColor}}; border-color: {{themeColor}};" bindtap="save" loading="{{saving}}">保存</button>
   </view>
 </view>

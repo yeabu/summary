@@ -1,11 +1,19 @@
 const req = require('../../../utils/request');
-const { makeFabStyle } = require('../../../utils/theme');
+const theme = require('../../../utils/theme');
+const { canAccess } = require('../../../utils/role');
 
 Page({
-  data: { items: [], loading: true, payOpen:false, payForm:{ payable_record_id:'', payment_amount:'', payment_date:'', payment_method:'bank_transfer', reference_number:'', notes:'' }, methodRange:['现金','银行转账','支票','其他'], methodMap:['cash','bank_transfer','check','other'], methodIndex:1, saving:false, fabStyle:'' },
+  data: { items: [], loading: true, payOpen:false, payForm:{ payable_record_id:'', payment_amount:'', payment_date:'', payment_method:'bank_transfer', reference_number:'', notes:'' }, methodRange:['现金','银行转账','支票','其他'], methodMap:['cash','bank_transfer','check','other'], methodIndex:1, saving:false, fabStyle:'', themeColor:'#B4282D' },
   async onShow() {
-    const themeColor = getApp().globalData.themeColor;
-    this.setData({ loading: true, fabStyle: makeFabStyle(themeColor) });
+    const role = (getApp().globalData && getApp().globalData.role) ? getApp().globalData.role : (wx.getStorageSync('role') || '');
+    if (!canAccess(role, ['admin'])) {
+      wx.showToast({ title: '无权限访问', icon: 'none' });
+      setTimeout(() => { wx.switchTab({ url: '/pages/home/index' }); }, 600);
+      this.setData({ loading: false });
+      return;
+    }
+    const themeColor = theme.getThemeColor();
+    this.setData({ loading: true, themeColor, fabStyle: theme.makeFabStyle(themeColor) });
     try {
       const data = await req.get('/api/payable/list');
       const raw = Array.isArray(data) ? data : (data.records || []);

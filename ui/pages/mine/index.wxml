@@ -1,6 +1,6 @@
 <view class="card">
   <view class="col" style="gap: 8rpx;">
-    <text>角色：{{role}}</text>
+    <text>角色：{{roleLabel}}</text>
     <button size="mini" bindtap="logout">退出登录</button>
   </view>
 </view>
@@ -25,10 +25,15 @@
     </view>
     <view class="row" style="gap: 12rpx; align-items:center;">
       <text>主题色</text>
-      <view class="row" style="gap: 12rpx;">
-        <view style="width:48rpx;height:48rpx;border-radius:50%;background:#B4282D; border:2rpx solid #eee;" bindtap="setTheme" data-color="#B4282D"></view>
-        <view style="width:48rpx;height:48rpx;border-radius:50%;background:#1C6DD0; border:2rpx solid #eee;" bindtap="setTheme" data-color="#1C6DD0"></view>
-        <view style="width:48rpx;height:48rpx;border-radius:50%;background:#07C160; border:2rpx solid #eee;" bindtap="setTheme" data-color="#07C160"></view>
+      <view class="row theme-options">
+        <block wx:for="{{themeColors}}" wx:key="*this">
+          <view
+            class="theme-dot {{item === themeActiveColor ? 'active' : ''}}"
+            style="background: {{item}};"
+            bindtap="setTheme"
+            data-color="{{item}}"
+          ></view>
+        </block>
       </view>
     </view>
   </view>

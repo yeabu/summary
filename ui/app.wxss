@@ -28,7 +28,7 @@ page { background: #F5F7FB; color: #1F2D3D; font-size: 28rpx; line-height: 1.6; 
 .btn-outline { background: #FFFFFF; color: #B4282D; border: 1rpx solid #B4282D; border-radius: 8rpx; padding: 20rpx; }
 
 /* Floating Action Button */
-.fab { position: fixed; right: 40rpx; bottom: calc(40rpx + env(safe-area-inset-bottom)); width: 96rpx; height: 96rpx; border-radius: 50%; background: linear-gradient(145deg, #D54C53, #B4282D); color:#fff; display:flex; align-items:center; justify-content:center; box-shadow: 0 16rpx 40rpx rgba(180,40,45,0.35); z-index: 99; transition: transform .1s ease-in-out; }
+.fab { position: fixed; right: 40rpx; bottom: calc(180rpx + env(safe-area-inset-bottom)); width: 96rpx; height: 96rpx; border-radius: 50%; background: linear-gradient(145deg, #D54C53, #B4282D); color:#fff; display:flex; align-items:center; justify-content:center; box-shadow: 0 16rpx 40rpx rgba(180,40,45,0.35); z-index: 99; transition: transform .1s ease-in-out; }
 .fab:active { transform: scale(0.96); }
 .fab-inner { position: relative; width: 100%; height: 100%; display:flex; align-items:center; justify-content:center; }
 .fab-bar { position: absolute; width: 36rpx; height: 6rpx; background: #fff; border-radius: 4rpx; }
@@ -36,15 +36,12 @@ page { background: #F5F7FB; color: #1F2D3D; font-size: 28rpx; line-height: 1.6; 
 
 /* Bottom sheet */
 .sheet { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top-left-radius: 24rpx; border-top-right-radius: 24rpx; box-shadow: 0 -12rpx 40rpx rgba(31,45,61,0.12); z-index: 98; }
-.sheet-body { padding: 24rpx; padding-bottom: calc(24rpx + env(safe-area-inset-bottom)); }
+.sheet-body { padding: 24rpx; padding-bottom: calc(220rpx + env(safe-area-inset-bottom)); }
 
 /* List */
 .list { margin: 16rpx; background: #fff; border-radius: 16rpx; overflow: hidden; }
 .list-item { padding: 24rpx; display: flex; justify-content: space-between; align-items: center; border-bottom: 1rpx solid #F0F2F5; }
 .list-item:last-child { border-bottom: 0; }
-
-/* Tiles (home shortcuts) */
-.tile { background: linear-gradient(135deg, #FFFFFF, #F2F6FF); border: 1rpx solid #EDF2FF; border-radius: 16rpx; padding: 40rpx 24rpx; text-align: center; box-shadow: 0 8rpx 30rpx rgba(31,45,61,0.06); }
 
 /* Status tags */
 .tag { padding: 6rpx 14rpx; border-radius: 999rpx; font-size: 22rpx; }

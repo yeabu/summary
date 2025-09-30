@@ -1,9 +1,131 @@
 .card { margin: 16rpx; }
 .muted { color: #999; font-size: 24rpx; }
 .sheet{ position:fixed; left:0; right:0; bottom:0; background:#fff; border-top-left-radius:24rpx; border-top-right-radius:24rpx; box-shadow:0 -8rpx 40rpx rgba(0,0,0,.15); }
-.sheet-body{ padding:24rpx; }
+.sheet-body{ padding:24rpx; padding-bottom: calc(220rpx + env(safe-area-inset-bottom)); }
 .field{ margin-top:16rpx; }
 .label{ color:#666; font-size:26rpx; margin-bottom:8rpx; display:block; }
 .input{ background:#f7f8fa; border:1rpx solid #e5e6eb; border-radius:8rpx; padding:20rpx; }
 .picker{ padding:16rpx; background:#f7f8fa; border:1rpx solid #e5e6eb; border-radius:8rpx; }
 .input.small{ padding: 18rpx; text-align: right; }
+
+.sheet-scroll {
+  max-height: 60vh;
+  overflow-y: auto;
+  margin-top: 24rpx;
+  padding-right: 8rpx;
+}
+
+.sheet-scroll::-webkit-scrollbar {
+  width: 6rpx;
+}
+
+.sheet-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.15);
+  border-radius: 8rpx;
+}
+
+.cell-group.fixed-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
+}
+
+.cell-group.fixed-grid .cell {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+@media (max-width: 700px) {
+  .cell-group.fixed-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.section-spacer {
+  height: 16rpx;
+}
+
+.sheet-footer {
+  margin-top: 24rpx;
+}
+
+.detail-settings {
+  margin-top: 12rpx;
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+.detail-settings .cell {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.group-title {
+  margin-top: 24rpx;
+  padding: 20rpx 24rpx;
+  border-radius: 16rpx;
+  color: #ffffff;
+  font-size: 32rpx;
+  font-weight: 600;
+}
+
+.group-title:first-child {
+  margin-top: 16rpx;
+}
+
+.detail-row {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+
+.detail-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  width: 100%;
+}
+
+.detail-block + .detail-block {
+  margin-top: 12rpx;
+}
+
+.detail-footer {
+  margin-top: 16rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+
+.detail-columns {
+  display: flex;
+  gap: 16rpx;
+}
+
+.detail-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+@media (max-width: 700px) {
+  .detail-column {
+    flex-basis: 100%;
+  }
+}
+
+.detail-hint {
+  font-size: 24rpx;
+  color: #7a8c99;
+}
+
+.input.textarea {
+  min-height: 120rpx;
+  padding: 16rpx 20rpx;
+  line-height: 1.5;
+}

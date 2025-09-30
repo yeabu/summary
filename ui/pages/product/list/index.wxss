@@ -1,7 +1,13 @@
+.page { padding: 24rpx; padding-bottom: calc(200rpx + env(safe-area-inset-bottom)); box-sizing: border-box; }
 /* pages/product/list/index.wxss */
 .sheet{ position:fixed; left:0; right:0; bottom:0; background:#fff; border-top-left-radius:24rpx; border-top-right-radius:24rpx; box-shadow:0 -8rpx 40rpx rgba(0,0,0,.15); }
-.sheet-body{ padding:24rpx; }
+.sheet-body{ padding:24rpx; padding-bottom: calc(220rpx + env(safe-area-inset-bottom)); }
 .field{ margin-top:16rpx; }
 .label{ color:#666; font-size:26rpx; margin-bottom:8rpx; display:block; }
 .input{ background:#f7f8fa; border:1rpx solid #e5e6eb; border-radius:8rpx; padding:20rpx; }
 .picker{ padding:16rpx; background:#f7f8fa; border:1rpx solid #e5e6eb; border-radius:8rpx; }
+.product-card{ flex-direction: column; align-items: stretch; }
+.product-card-header{ display:flex; justify-content: space-between; align-items:flex-start; gap:24rpx; }
+.product-info{ flex:1; display:flex; flex-direction:column; gap:8rpx; }
+.product-price{ min-width:200rpx; text-align:right; display:flex; flex-direction:column; gap:8rpx; }
+.product-actions{ margin-top:16rpx; display:flex; flex-wrap:wrap; gap:16rpx; justify-content:flex-end; }

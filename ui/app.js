@@ -1,7 +1,10 @@
+const { getRoleLabel } = require('./utils/role');
+
 App({
   globalData: {
     token: '',
     role: '',
+    roleLabel: '佳慧伙伴',
     apiBase: '',
     themeColor: '#B4282D',
     lang: 'zh'
@@ -12,7 +15,9 @@ App({
     const apiBase = require('./config').apiBase;
     const themeColor = wx.getStorageSync('themeColor') || '#B4282D';
     const lang = wx.getStorageSync('lang') || 'zh';
-    this.globalData = { token, role, apiBase, themeColor, lang };
+    const roleLabel = getRoleLabel(role);
+    this.globalData = { token, role, roleLabel, apiBase, themeColor, lang };
+    try { wx.setStorageSync('roleLabel', roleLabel); } catch (e) {}
     // 首次进入强制路由到登录/首页
     if (!token) {
       wx.reLaunch({ url: '/pages/login/index' });

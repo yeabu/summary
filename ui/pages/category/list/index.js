@@ -1,12 +1,21 @@
 const req = require('../../../utils/request');
-const { makeFabStyle } = require('../../../utils/theme');
+const theme = require('../../../utils/theme');
+const { canAccess } = require('../../../utils/role');
 Page({
-  data: { items: [], loading: true, formOpen:false, form:{ name:'', status:'active' }, statusRange:['active','inactive'], statusIndex:0, saving:false, fabStyle:'' },
+  data: { items: [], loading: true, formOpen:false, form:{ name:'', status:'active' }, statusRange:['active','inactive'], statusIndex:0, saving:false, fabStyle:'', themeColor:'#B4282D' },
   async onShow(){
-    this.setData({ loading:true, fabStyle: makeFabStyle(getApp().globalData.themeColor) });
+    const role = (getApp().globalData && getApp().globalData.role) ? getApp().globalData.role : (wx.getStorageSync('role') || '');
+    if (!canAccess(role, ['admin'])) {
+      wx.showToast({ title: '无权限访问', icon: 'none' });
+      setTimeout(() => { wx.switchTab({ url: '/pages/home/index' }); }, 600);
+      this.setData({ loading:false });
+      return;
+    }
+    const themeColor = theme.getThemeColor();
+    this.setData({ loading:true, themeColor, fabStyle: theme.makeFabStyle(themeColor) });
     try{
       const items = await req.get('/api/expense-category/list');
-      this.setData({ items: (Array.isArray(items) ? items : (items.records || [])) });
+      this.setData({ items: (Array.isArray(items) ? items : (items.records || [])), themeColor });
     }catch(e){ wx.showToast({ title:'加载失败', icon:'none' }); }
     finally{ this.setData({ loading:false }); }
   },

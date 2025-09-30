@@ -1,4 +1,7 @@
 {
   "navigationBarTitleText": "应付款列表",
-  "enablePullDownRefresh": true
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "bottom-nav": "/components/bottom-nav/index"
+  }
 }
