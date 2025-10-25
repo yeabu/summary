@@ -1,0 +1,86 @@
+<view class="page">
+  <view class="filter-card">
+    <view class="filter-row">
+      <input
+        class="search-field"
+        placeholder="搜索姓名、联系方式或证件"
+        value="{{filters.keyword}}"
+        bindinput="onSearchInput"
+        confirm-type="search"
+        bindconfirm="onSearchConfirm"
+      />
+      <button class="reset-btn" wx:if="{{filters.keyword || filters.role !== 'all' || filters.base !== 'all'}}" size="mini" bindtap="onResetFilters">
+        重置
+      </button>
+    </view>
+    <view class="filter-bar">
+      <picker class="filter-picker" range="{{roleFilterOptions}}" range-key="label" value="{{roleFilterIndex}}" bindchange="onRoleFilterChange">
+        <view class="filter-chip">{{roleFilterOptions[roleFilterIndex] ? roleFilterOptions[roleFilterIndex].label : '全部角色'}}</view>
+      </picker>
+      <picker class="filter-picker" range="{{baseFilterOptions}}" range-key="label" value="{{baseFilterIndex}}" bindchange="onBaseFilterChange">
+        <view class="filter-chip">{{baseFilterOptions[baseFilterIndex] ? baseFilterOptions[baseFilterIndex].label : '全部基地'}}</view>
+      </picker>
+    </view>
+  </view>
+
+  <block wx:if="{{loading}}">
+    <view class="empty">正在加载人员数据...</view>
+  </block>
+  <block wx:elif="{{!list.length}}">
+    <view class="empty">暂无符合条件的人员</view>
+  </block>
+  <block wx:else>
+    <view class="user-grid">
+      <view class="user-card" wx:for="{{list}}" wx:key="id">
+        <view class="user-card__header">
+          <text class="user-name">{{item.name}}</text>
+          <text class="user-role" style="color: {{themeColor}};">{{item.roleLabel}}</text>
+        </view>
+        <view class="user-meta">
+          <view class="meta-row">
+            <text class="meta-label">所属基地</text>
+            <text class="meta-value">{{item.baseNames || '—'}}</text>
+          </view>
+          <view class="meta-row">
+            <text class="meta-label">加入日期</text>
+            <text class="meta-value">{{item.joinDate || '—'}}</text>
+          </view>
+          <view class="meta-row">
+            <text class="meta-label">联系方式</text>
+            <text class="meta-value">{{item.phone || '—'}} {{item.email || ''}}</text>
+          </view>
+          <view class="meta-row">
+            <text class="meta-label">证件信息</text>
+            <text class="meta-value">
+              {{item.visaType ? '签证：' + item.visaType + ' ' : ''}}{{item.passportNo ? '护照：' + item.passportNo + ' ' : ''}}{{item.idCard ? '证件：' + item.idCard : ''}}
+            </text>
+          </view>
+          <view class="meta-row" wx:if="{{item.emergencyContact || item.emergencyPhone}}">
+            <text class="meta-label">紧急联系人</text>
+            <text class="meta-value">{{item.emergencyContact || ''}} {{item.emergencyPhone || ''}}</text>
+          </view>
+          <view class="meta-row" wx:if="{{item.remark}}">
+            <text class="meta-label">备注</text>
+            <text class="meta-value">{{item.remark}}</text>
+          </view>
+        </view>
+        <view class="user-actions">
+          <button size="mini" bindtap="onEdit" data-id="{{item.id}}">编辑</button>
+          <button size="mini" type="warn" bindtap="onDelete" data-id="{{item.id}}">删除</button>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <view class="fab" bindtap="openCreate" style="{{fabStyle}}">
+    <view class="fab-inner">
+      <view class="fab-bar"></view>
+      <view class="fab-bar v"></view>
+    </view>
+  </view>
+
+  <view class="form-layer" wx:if="{{formOpen}}">
+    <view class="form-mask" bindtap="closeForm"></view>
+    <view class="form-dialog {{isTablet ? 'tablet' : 'mobile'}}">
+      <view class="dialog-header">
+        <text class="dialog-title">{{form.id ? '编辑人员' : '新增人员'}}<

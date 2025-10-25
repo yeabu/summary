@@ -93,6 +93,7 @@ const ProfileView = () => {
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     {user?.role === 'admin' ? '系统管理员' : 
+                     user?.role === 'warehouse_admin' ? '仓库管理员' :
                      user?.role === 'factory_manager' ? '厂长' : 
                      user?.role === 'captain' ? '队长' : '基地代理'}
                   </Typography>

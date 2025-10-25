@@ -15,23 +15,34 @@ Page({
     loading: true,
     list: [],
     q: '',
-    themeColor: theme.getThemeColor()
+    themeColor: theme.getThemeColor(),
+    showFallbackNav: false,
+    deviceProfileClass: '',
+    isTablet: false
   },
   onShow() {
     const role = (getApp().globalData && getApp().globalData.role) ? getApp().globalData.role : (wx.getStorageSync('role') || '');
-    if (!canAccess(role, ['admin', 'base_agent'])) {
+    if (!canAccess(role, ['admin', 'warehouse_admin', 'base_agent'])) {
       wx.showToast({ title: '无权限访问', icon: 'none' });
       setTimeout(() => { wx.switchTab({ url: '/pages/home/index' }); }, 600);
       return;
     }
     const themeColor = theme.getThemeColor();
     const tabBar = typeof this.getTabBar === 'function' ? this.getTabBar() : null;
-    if (tabBar) {
+    const hasTabBar = !!(tabBar && typeof tabBar.refreshTabs === 'function');
+    if (hasTabBar) {
       if (typeof tabBar.refreshTabs === 'function') { tabBar.refreshTabs(); }
       if (typeof tabBar.syncWithRoute === 'function') { tabBar.syncWithRoute(); }
       if (typeof tabBar.setThemeColor === 'function') { tabBar.setThemeColor(themeColor); }
     }
-    this.setData({ themeColor });
+    const app = typeof getApp === 'function' ? getApp() : null;
+    const deviceProfileClass = app && app.globalData ? (app.globalData.deviceProfileClass || '') : (wx.getStorageSync('deviceProfileClass') || '');
+    const isTablet = app && app.globalData ? !!app.globalData.isTablet : !!wx.getStorageSync('isTablet');
+    this.setData({ themeColor, showFallbackNav: !hasTabBar, deviceProfileClass, isTablet });
+    const fallbackNav = this.selectComponent('#fallback-nav');
+    if (fallbackNav && typeof fallbackNav.setThemeColor === 'function') {
+      fallbackNav.setThemeColor(themeColor);
+    }
     this.loadInventory();
   },
   async loadInventory() {

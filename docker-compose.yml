@@ -47,13 +47,37 @@ services:
     image: summary-frontend:latest
     container_name: summary-frontend
     restart: unless-stopped
-    depends_on:
-      - backend
     environment:
       # Runtime override for API base; leave empty for same-origin
       VITE_API_URL: ${VITE_API_URL-}
+    expose:
+      - "80"
+    networks:
+      - default
+
+  proxy:
+    image: nginx:1.25-alpine
+    container_name: summary-proxy
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - backend
+    environment:
+      FRONTEND_DOMAIN: jhb.asia
+      BACKEND_DOMAIN: admin.jhb.asia
+      FRONTEND_SSL_CERT: /etc/nginx/certs/jhb.asia/fullchain.pem
+      FRONTEND_SSL_KEY: /etc/nginx/certs/jhb.asia/privkey.pem
+      BACKEND_SSL_CERT: /etc/nginx/certs/admin.jhb.asia/fullchain.pem
+      BACKEND_SSL_KEY: /etc/nginx/certs/admin.jhb.asia/privkey.pem
+      FRONTEND_UPSTREAM: frontend:80
+      BACKEND_UPSTREAM: backend:8080
+      NGINX_ENVSUBST_COMMAND: "envsubst '$${FRONTEND_DOMAIN} $${BACKEND_DOMAIN} $${FRONTEND_SSL_CERT} $${FRONTEND_SSL_KEY} $${BACKEND_SSL_CERT} $${BACKEND_SSL_KEY} $${FRONTEND_UPSTREAM} $${BACKEND_UPSTREAM}'"
     ports:
       - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/templates/default.conf.template:ro
+      - ./certs:/etc/nginx/certs:ro
     networks:
       - default
 

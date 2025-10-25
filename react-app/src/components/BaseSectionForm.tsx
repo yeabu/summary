@@ -73,13 +73,19 @@ const BaseSectionForm: React.FC<BaseSectionFormProps> = ({
         const appDtosUsers: User[] = userList.map(user => ({
           id: user.id,
           name: user.name,
-          role: user.role as 'admin' | 'base_agent' | 'captain' | 'factory_manager',
+          role: user.role as 'admin' | 'warehouse_admin' | 'base_agent' | 'captain' | 'factory_manager',
           bases: user.bases || [], // 使用bases而不是base
           base_ids: user.base_ids || [], // 添加base_ids字段
           join_date: user.join_date,
-          mobile: user.mobile,
+          phone: user.phone || (user as any).mobile,
+          email: user.email,
           passport_number: user.passport_number,
+          visa_type: user.visa_type,
           visa_expiry_date: user.visa_expiry_date,
+          id_card: user.id_card,
+          emergency_contact: user.emergency_contact,
+          emergency_phone: user.emergency_phone,
+          remark: user.remark,
           created_at: user.created_at,
           updated_at: user.updated_at
         }));

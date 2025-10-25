@@ -4,8 +4,8 @@
 }
 
 .login-form {
-  width: 80%;
-  margin: 0 auto;
+  width: 70%;
+  margin: 0 15%;
   min-height: 300rpx;
 }
 
@@ -46,17 +46,17 @@
 .footer { margin-top: 40rpx; text-align: center; color: #999; font-size: 24rpx; }
 
 /* ===== Enhanced styles for ColorUI-based login ===== */
-.login-page { min-height: 100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding: 40rpx 32rpx; box-sizing: border-box; }
+.login-wrapper { width: 100%; display: flex; justify-content: center; }
+.login-page { min-height: 90vh; display:flex; flex-direction:column; align-items:center; justify-content:center; padding: 40rpx 32rpx; box-sizing: border-box; width: 90%; max-width: 450px; }
 .brand { display:flex; flex-direction:column; align-items:center; margin-bottom: 32rpx; }
 .brand .logo { width: 280rpx; height: 280rpx; border-radius: 24rpx; box-shadow: 0 12rpx 40rpx rgba(0,0,0,0.06); }
 .brand .title { margin-top: 16rpx; font-size: 36rpx; font-weight: 600; }
 
-/* 外层表单左右 15% 留白 */
-.login-form { margin-left: 15%; margin-right: 15%; }
-/* 内部输入控件左右 5% 留白（仅影响当前页） */
-.login-form .cu-form-control { margin-left: 5%; margin-right: 5%; }
-
-/* （移除眼睛控件相关样式） */
+/* 外层表单左右留白 */
+.login-form { margin-left: 0; margin-right: 0; }
+/* 输入控件左右留白（仅影响当前页） */
+.login-form .cu-form-control { margin-left: 0; margin-right: 0; }
+.login-form .cu-form-group { margin-left: 0; margin-right: 0; }
 
 /* 强制登录按钮为蓝色背景、白字 */
 .login-submit { 
@@ -66,3 +66,40 @@
   box-shadow: 0 12rpx 28rpx rgba(22, 100, 255, 0.45);
 }
 .login-submit[disabled] { opacity: .6; }
+
+.login-scale .login-wrapper {
+  width: 160%;
+  transform: scale(0.45);
+  transform-origin: top center;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 0;
+}
+
+.login-scale .login-page {
+  width: 100%;
+  max-width: none;
+  padding: 48rpx 32rpx;
+  box-sizing: border-box;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+.login-scale .brand {
+  margin-bottom: 24rpx;
+}
+
+.login-scale .brand .logo {
+  width: 280rpx;
+  height: 280rpx;
+}
+
+.login-scale .brand .title {
+  font-size: 33rpx;
+}
+
+.login-scale .cu-form-group {
+  margin-left: 0;
+  margin-right: 0;
+}

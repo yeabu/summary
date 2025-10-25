@@ -1,4 +1,4 @@
-<view class="page">
+<view class="page {{deviceProfileClass}}">
   <view class="calendar-card">
     <view class="calendar-header">
       <button class="nav-btn" size="mini" bindtap="prevMonth">‹</button>
@@ -54,4 +54,5 @@
     </block>
     <view wx:else class="empty">当天暂无个人记录</view>
   </view>
+  <bottom-nav id="fallback-nav" wx:if="{{showFallbackNav}}" />
 </view>

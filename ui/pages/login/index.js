@@ -1,6 +1,18 @@
 const req = require('../../utils/request');
 const { getRoleLabel } = require('../../utils/role');
 
+function resolveDeviceProfileClassValue() {
+  const app = typeof getApp === 'function' ? getApp() : null;
+  if (app && app.globalData && app.globalData.deviceProfileClass) {
+    return app.globalData.deviceProfileClass;
+  }
+  try {
+    return wx.getStorageSync('deviceProfileClass') || '';
+  } catch (e) {
+    return '';
+  }
+}
+
 Page({
   data: { 
     name: '', 
@@ -16,6 +28,10 @@ Page({
     if (app && app.globalData && app.globalData.themeColor) {
       this.setData({ themeColor: app.globalData.themeColor });
     }
+    this.applyTabletScaling();
+  },
+  onShow(){
+    this.applyTabletScaling();
   },
   onName(e) { this.setData({ name: e.detail.value, nameErr: '' }); },
   onPwd(e) { this.setData({ pwd: e.detail.value, pwdErr: '' }); },
@@ -54,5 +70,25 @@ Page({
       content: '请联系管理员',
       showCancel: false
     })
+  },
+  applyTabletScaling() {
+    const app = typeof getApp === 'function' ? getApp() : null;
+    const baseClass = resolveDeviceProfileClassValue();
+    const cleanedBase = (baseClass || '')
+      .replace(/\bscale-(half|quarter)\b/g, '')
+      .replace(/\blogin-scale\b/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const isTargetTablet = /\bdevice-tablet-11(-pro)?\b/.test(baseClass || '');
+    const finalCls = isTargetTablet
+      ? `${cleanedBase} login-scale`.trim()
+      : cleanedBase;
+    this.setData({ deviceProfileClass: finalCls });
+    if (app && app.globalData) {
+      app.globalData.deviceProfileClass = finalCls;
+    }
+    try {
+      wx.setStorageSync('deviceProfileClass', finalCls);
+    } catch (e) {}
   }
 });

@@ -2,6 +2,6 @@
   "navigationBarTitleText": "基地管理",
   "enablePullDownRefresh": true,
   "usingComponents": {
-    "bottom-nav": "/components/bottom-nav/index"
+    "bottom-nav": "../../../components/bottom-nav/index"
   }
 }

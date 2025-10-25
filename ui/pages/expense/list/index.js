@@ -11,16 +11,17 @@ function formatAmount(value) {
 }
 
 Page({
-  data: { items: [], loading: true, formOpen:false, form:{ date:'', base_id:'', category_id:'', amount:'', currency:'CNY', detail:'' }, bases:[], baseNames:[], baseIndex:0, categories:[], categoryNames:[], categoryIndex:0, currencyCodes: CURRENCY_CODES, currencyLabels: CURRENCY_LABELS, currencyIndex:0, saving:false, fabStyle:'', themeColor:'#B4282D' },
+  data: { items: [], loading: true, formOpen:false, form:{ date:'', base_id:'', category_id:'', amount:'', currency:'CNY', detail:'' }, bases:[], baseNames:[], baseIndex:0, categories:[], categoryNames:[], categoryIndex:0, currencyCodes: CURRENCY_CODES, currencyLabels: CURRENCY_LABELS, currencyIndex:0, saving:false, fabStyle:'', themeColor:'#B4282D', showFallbackNav:false },
   async onShow() {
     const tabBar = typeof this.getTabBar === 'function' ? this.getTabBar() : null;
+    const hasTabBar = !!(tabBar && typeof tabBar.refreshTabs === 'function');
     const themeColor = theme.getThemeColor();
-    if (tabBar) {
+    if (hasTabBar) {
       if (typeof tabBar.refreshTabs === 'function') { tabBar.refreshTabs(); }
       if (typeof tabBar.syncWithRoute === 'function') { tabBar.syncWithRoute(); }
       if (typeof tabBar.setThemeColor === 'function') { tabBar.setThemeColor(themeColor); }
     }
-    this.setData({ loading: true, themeColor, fabStyle: theme.makeFabStyle(themeColor) });
+    this.setData({ loading: true, themeColor, fabStyle: theme.makeFabStyle(themeColor), showFallbackNav: !hasTabBar });
     try {
       const [elist, blist, clist] = await Promise.all([
         req.get('/api/expense/list'),

@@ -3,17 +3,62 @@ const theme = require('../../../utils/theme');
 const { canAccess } = require('../../../utils/role');
 
 Page({
-  data: { id: '', item: { supplierName:'', baseName:'', total:0, paid:0, remaining:0, status:'', dueDate:'' }, payments: [], links: [], payOpen:false, payForm:{ payable_record_id:'', payment_amount:'', payment_date:'', payment_method:'bank_transfer', reference_number:'', notes:'' }, methodRange:['现金','银行转账','支票','其他'], methodMap:['cash','bank_transfer','check','other'], methodIndex:1, saving:false, sortKeyOptions:['日期','金额'], sortKeyIndex:0, sortOrderOptions:['降序','升序'], sortOrderIndex:0, fabStyle:'', themeColor:'#B4282D' },
+  data: {
+    id: '',
+    item: { supplierName:'', baseName:'', total:0, paid:0, remaining:0, status:'', dueDate:'' },
+    payments: [],
+    links: [],
+    payOpen: false,
+    payForm: { payable_record_id:'', payment_amount:'', payment_date:'', payment_method:'bank_transfer', reference_number:'', notes:'' },
+    methodRange: ['现金','银行转账','支票','其他'],
+    methodMap: ['cash','bank_transfer','check','other'],
+    methodIndex: 1,
+    saving: false,
+    sortKeyOptions: ['日期','金额'],
+    sortKeyIndex: 0,
+    sortOrderOptions: ['降序','升序'],
+    sortOrderIndex: 0,
+    fabStyle: '',
+    themeColor: '#B4282D',
+    showFallbackNav: false,
+    deviceProfileClass: '',
+    isTablet: false
+  },
   onLoad(options){ this.setData({ id: options.id || '' }); },
   async onShow(){
-    const role = (getApp().globalData && getApp().globalData.role) ? getApp().globalData.role : (wx.getStorageSync('role') || '');
+    const app = typeof getApp === 'function' ? getApp() : null;
+    const role = (app && app.globalData && app.globalData.role) ? app.globalData.role : (wx.getStorageSync('role') || '');
     if (!canAccess(role, ['admin'])) {
       wx.showToast({ title: '无权限访问', icon: 'none' });
       setTimeout(() => { wx.navigateBack({ delta: 1 }); }, 600);
       return;
     }
     const themeColor = theme.getThemeColor();
-    this.setData({ themeColor, fabStyle: theme.makeFabStyle(themeColor) });
+    const tabBar = typeof this.getTabBar === 'function' ? this.getTabBar() : null;
+    const hasTabBar = !!(tabBar && typeof tabBar.refreshTabs === 'function');
+    if (hasTabBar) {
+      if (typeof tabBar.refreshTabs === 'function') { tabBar.refreshTabs(); }
+      if (typeof tabBar.syncWithRoute === 'function') { tabBar.syncWithRoute(); }
+      if (typeof tabBar.setThemeColor === 'function') { tabBar.setThemeColor(themeColor); }
+    }
+    const deviceProfileClass = app && app.globalData ? (app.globalData.deviceProfileClass || '') : (wx.getStorageSync('deviceProfileClass') || '');
+    const isTablet = app && app.globalData ? !!app.globalData.isTablet : !!wx.getStorageSync('isTablet');
+    this.setData({
+      themeColor,
+      fabStyle: theme.makeFabStyle(themeColor),
+      showFallbackNav: !hasTabBar,
+      deviceProfileClass,
+      isTablet
+    });
+    wx.setNavigationBarColor({
+      frontColor: '#000000',
+      backgroundColor: '#ffffff',
+      animation: { duration: 0, timingFunc: 'linear' }
+    });
+    const fallbackNav = this.selectComponent('#fallback-nav');
+    if (!hasTabBar && fallbackNav && typeof fallbackNav.setThemeColor === 'function') {
+      fallbackNav.setThemeColor(themeColor);
+    }
     if(!this.data.id){ wx.showToast({ title:'缺少ID', icon:'none' }); return; }
     try{
       const d = await req.get('/api/payable/detail?id='+this.data.id);

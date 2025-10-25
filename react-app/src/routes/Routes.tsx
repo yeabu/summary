@@ -19,7 +19,7 @@ import SupplierManagementView from '../views/SupplierManagementView';
 import ExpenseCategoryManagementView from '../views/ExpenseCategoryManagementView';
 import SupplierPieStatsView from '../views/SupplierPieStatsView';
 import PayableTimelineView from '../views/PayableTimelineView';
-import { ADMIN_ROLE } from '../utils/roles';
+import { ADMIN_ROLE, WAREHOUSE_ADMIN_ROLE } from '../utils/roles';
 import ProductManagementView from '../views/ProductManagementView';
 import InventoryManagementView from '../views/InventoryManagementView';
 
@@ -53,10 +53,13 @@ const App = () => {
             <Route path="supplier/management" element={<SupplierManagementView />} />
             {/* 商品管理 */}
             <Route path="product/management" element={<ProductManagementView />} />
-            {/* ONLY admin 见统计分析和采购管理，采用roles嵌套路由 */}
+            {/* 采购管理：管理员与仓库管理员可访问 */}
+            <Route element={<ProtectedRoute roles={[ADMIN_ROLE, WAREHOUSE_ADMIN_ROLE]} />}>
+              <Route path="purchase/list" element={<PurchaseListView />} />
+            </Route>
+            {/* ONLY admin 见统计分析及基础配置，采用roles嵌套路由 */}
             <Route element={<ProtectedRoute roles={[ADMIN_ROLE]} />}> 
               <Route path="expense/stats" element={<AnalyticsView />} />
-              <Route path="purchase/list" element={<PurchaseListView />} />
               <Route path="base/management" element={<BaseManagementView />} />
               <Route path="base/section-management" element={<BaseSectionManagementView />} />
               <Route path="expense/category-management" element={<ExpenseCategoryManagementView />} />

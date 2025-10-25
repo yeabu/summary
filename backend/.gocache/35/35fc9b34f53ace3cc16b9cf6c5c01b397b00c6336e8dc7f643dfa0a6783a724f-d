@@ -1,0 +1,15 @@
+./analytics.go
+./auth.go
+./base.go
+./base_section.go
+./expense.go
+./expense_category.go
+./inventory.go
+./payable.go
+./product.go
+./product_purchase_param.go
+./product_units.go
+./purchase.go
+./rate.go
+./supplier.go
+./user_management.go

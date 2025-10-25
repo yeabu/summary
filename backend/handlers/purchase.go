@@ -48,14 +48,14 @@ func CreatePurchase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 允许admin和base_agent都可以创建采购记录（健壮获取role，避免断言panic）
+	// 允许 admin、base_agent、warehouse_admin 创建采购记录（健壮获取role，避免断言panic）
 	var userRole string
 	if v, ok := claims["role"]; ok && v != nil {
 		if s, ok2 := v.(string); ok2 {
 			userRole = s
 		}
 	}
-	if userRole != "admin" && userRole != "base_agent" {
+	if userRole != "admin" && userRole != "base_agent" && userRole != "warehouse_admin" {
 		http.Error(w, "没有权限创建采购记录", http.StatusForbidden)
 		return
 	}
@@ -88,8 +88,8 @@ func CreatePurchase(w http.ResponseWriter, r *http.Request) {
 
 	// 处理BaseID字段根据用户角色
 	var baseID uint
-	if userRole == "admin" {
-		// 管理员可以为任意基地创建采购记录
+	if userRole == "admin" || userRole == "warehouse_admin" {
+		// 管理员或仓库管理员可以为任意基地创建采购记录
 		// 如果指定了基地ID，则使用指定的基地
 		if req.BaseID != 0 {
 			// 验证基地是否存在
@@ -100,8 +100,8 @@ func CreatePurchase(w http.ResponseWriter, r *http.Request) {
 			}
 			baseID = req.BaseID
 		} else {
-			// 如果admin用户没有指定基地，返回错误（创建记录时需要指定基地）
-			http.Error(w, "管理员必须指定基地", http.StatusBadRequest)
+			// 如果未指定基地，返回错误（创建记录时需要指定基地）
+			http.Error(w, "必须指定基地", http.StatusBadRequest)
 			return
 		}
 	} else { // base_agent
@@ -505,7 +505,7 @@ func UploadPurchaseReceipt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	role, _ := claims["role"].(string)
-	if !(role == "admin" || role == "base_agent") {
+	if !(role == "admin" || role == "base_agent" || role == "warehouse_admin") {
 		http.Error(w, "无权限", http.StatusForbidden)
 		return
 	}
@@ -634,7 +634,7 @@ func ListPurchase(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userRole := claims["role"].(string)
-	if userRole != "admin" && userRole != "base_agent" {
+	if userRole != "admin" && userRole != "base_agent" && userRole != "warehouse_admin" {
 		http.Error(w, "没有权限查看采购记录", http.StatusForbidden)
 		return
 	}
@@ -663,8 +663,8 @@ func ListPurchase(w http.ResponseWriter, r *http.Request) {
 			// 如果用户没有关联基地，则不显示任何记录
 			q = q.Where("1 = 0")
 		}
-	} else if userRole == "admin" {
-		// 管理员可以查看所有记录，支持按基地筛选
+	} else {
+		// 管理员及仓库管理员可以查看所有记录，支持按基地筛选
 		if base := r.URL.Query().Get("base"); base != "" {
 			var baseModel models.Base
 			if err := db.DB.Where("name = ?", base).First(&baseModel).Error; err == nil {
@@ -677,7 +677,7 @@ func ListPurchase(w http.ResponseWriter, r *http.Request) {
 		if createdBy == "me" {
 			q = q.Where("purchase_entries.created_by = ?", uid)
 		} else if cid, err := strconv.ParseUint(createdBy, 10, 64); err == nil {
-			if userRole == "admin" || uint(cid) == uid {
+			if userRole == "admin" || userRole == "warehouse_admin" || uint(cid) == uid {
 				q = q.Where("purchase_entries.created_by = ?", uint(cid))
 			} else {
 				q = q.Where("purchase_entries.created_by = ?", uid)
@@ -754,7 +754,7 @@ func SupplierSuggestions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	role := claims["role"].(string)
-	if role != "admin" && role != "base_agent" {
+	if role != "admin" && role != "base_agent" && role != "warehouse_admin" {
 		http.Error(w, "无权访问", http.StatusForbidden)
 		return
 	}
@@ -791,7 +791,7 @@ func ProductSuggestions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	role := claims["role"].(string)
-	if role != "admin" && role != "base_agent" {
+	if role != "admin" && role != "base_agent" && role != "warehouse_admin" {
 		http.Error(w, "无权访问", http.StatusForbidden)
 		return
 	}
@@ -839,7 +839,7 @@ func DeletePurchase(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userRole := claims["role"].(string)
-	if userRole != "admin" && userRole != "base_agent" {
+	if userRole != "admin" && userRole != "base_agent" && userRole != "warehouse_admin" {
 		http.Error(w, "没有权限删除采购记录", http.StatusForbidden)
 		return
 	}
@@ -853,8 +853,8 @@ func DeletePurchase(w http.ResponseWriter, r *http.Request) {
 	}
 
 	uid := uint(claims["uid"].(float64))
-	// 权限检查：管理员可以删除所有记录，基地代理只能删除自己创建的记录
-	if !(userRole == "admin" || (userRole == "base_agent" && purchase.CreatedBy == uid)) {
+	// 权限检查：管理员或仓库管理员可以删除所有记录，基地代理仅可删除自己创建的记录
+	if !(userRole == "admin" || userRole == "warehouse_admin" || (userRole == "base_agent" && purchase.CreatedBy == uid)) {
 		http.Error(w, "无权删除该记录", http.StatusForbidden)
 		return
 	}
@@ -947,7 +947,7 @@ func UpdatePurchase(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userRole := claims["role"].(string)
-	if userRole != "admin" && userRole != "base_agent" {
+	if userRole != "admin" && userRole != "base_agent" && userRole != "warehouse_admin" {
 		http.Error(w, "没有权限更新采购记录", http.StatusForbidden)
 		return
 	}
@@ -966,9 +966,9 @@ func UpdatePurchase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 权限检查：管理员可以更新所有记录，基地代理只能更新自己创建的记录
+	// 权限检查：管理员或仓库管理员可以更新所有记录，基地代理仅可更新自己创建的记录
 	uid := uint(claims["uid"].(float64))
-	if !(userRole == "admin" || (userRole == "base_agent" && purchase.CreatedBy == uid)) {
+	if !(userRole == "admin" || userRole == "warehouse_admin" || (userRole == "base_agent" && purchase.CreatedBy == uid)) {
 		http.Error(w, "无权更新该记录", http.StatusForbidden)
 		return
 	}
@@ -1086,7 +1086,7 @@ func BatchDeletePurchase(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userRole := claims["role"].(string)
-	if userRole != "admin" && userRole != "base_agent" {
+	if userRole != "admin" && userRole != "base_agent" && userRole != "warehouse_admin" {
 		http.Error(w, "没有权限删除采购记录", http.StatusForbidden)
 		return
 	}

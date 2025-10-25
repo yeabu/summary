@@ -53,12 +53,15 @@ Page({
     errors: { order_number:'', purchase_date:'', base_id:'', supplier_id:'', items:[{}] },
     i18n: {}, themeColor: '#B4282D', fabStyle: '',
     currencyCodes: CURRENCY_CODES, currencyLabels: CURRENCY_LABELS, currencyIndex: 0,
-    saving:false 
+    saving:false,
+    showFallbackNav: false,
+    deviceProfileClass: '',
+    isTablet: false
   },
   async onShow() {
     const app = getApp();
     const role = (app && app.globalData && app.globalData.role) ? app.globalData.role : (wx.getStorageSync('role') || '');
-    if (!canAccess(role, ['admin'])) {
+    if (!canAccess(role, ['admin', 'warehouse_admin'])) {
       wx.showToast({ title: '无权限访问', icon: 'none' });
       setTimeout(() => { wx.switchTab({ url: '/pages/home/index' }); }, 600);
       this.setData({ loading: false });
@@ -66,7 +69,33 @@ Page({
     }
     const themeColor = theme.getThemeColor();
     const lang = app && app.globalData ? app.globalData.lang : 'zh';
-    this.setData({ loading: true, i18n: getI18n(lang), themeColor, fabStyle: theme.makeFabStyle(themeColor) });
+    const tabBar = typeof this.getTabBar === 'function' ? this.getTabBar() : null;
+    const hasTabBar = !!(tabBar && typeof tabBar.refreshTabs === 'function');
+    if (hasTabBar) {
+      if (typeof tabBar.refreshTabs === 'function') { tabBar.refreshTabs(); }
+      if (typeof tabBar.syncWithRoute === 'function') { tabBar.syncWithRoute(); }
+      if (typeof tabBar.setThemeColor === 'function') { tabBar.setThemeColor(themeColor); }
+    }
+    const deviceProfileClass = app && app.globalData ? (app.globalData.deviceProfileClass || '') : (wx.getStorageSync('deviceProfileClass') || '');
+    const isTablet = app && app.globalData ? !!app.globalData.isTablet : !!wx.getStorageSync('isTablet');
+    this.setData({
+      loading: true,
+      i18n: getI18n(lang),
+      themeColor,
+      fabStyle: theme.makeFabStyle(themeColor),
+      showFallbackNav: !hasTabBar,
+      deviceProfileClass,
+      isTablet
+    });
+    const fallbackNav = this.selectComponent('#fallback-nav');
+    if (!hasTabBar && fallbackNav && typeof fallbackNav.setThemeColor === 'function') {
+      fallbackNav.setThemeColor(themeColor);
+    }
+    wx.setNavigationBarColor({
+      frontColor: '#000000',
+      backgroundColor: '#ffffff',
+      animation: { duration: 0, timingFunc: 'linear' }
+    });
     try {
       const [plist, blist, slist, prods] = await Promise.all([
         req.get('/api/purchase/list'),

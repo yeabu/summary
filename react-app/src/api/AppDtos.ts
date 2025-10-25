@@ -5,14 +5,20 @@
 export interface User {
   id?: number;
   name: string;
-  role: 'admin' | 'base_agent' | 'captain' | 'factory_manager';
-  base_ids?: number[];  // 用户关联的基地ID列表
-  bases?: Base[];       // 用户关联的基地列表
-  password?: string;  // 只在创建/更新时使用
-  join_date?: string;        // 入司时间 (格式: YYYY-MM-DD)
-  mobile?: string;           // 手机号
-  passport_number?: string;  // 护照号
-  visa_expiry_date?: string; // 签证到期时间 (格式: YYYY-MM-DD)
+  role: 'admin' | 'warehouse_admin' | 'base_agent' | 'captain' | 'factory_manager';
+  base_ids?: number[];
+  bases?: Base[];
+  password?: string;
+  join_date?: string;
+  phone?: string;
+  email?: string;
+  passport_number?: string;
+  visa_type?: string;
+  visa_expiry_date?: string;
+  id_card?: string;
+  emergency_contact?: string;
+  emergency_phone?: string;
+  remark?: string;
   created_at?: string;
   updated_at?: string;
 }

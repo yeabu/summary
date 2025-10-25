@@ -37,9 +37,16 @@ export interface User {
   base_ids?: number[];  // 用户关联的基地ID列表
   bases?: Base[];       // 用户关联的基地列表
   join_date?: string;
-  mobile?: string;
+  phone?: string;
+  email?: string;
   passport_number?: string;
+  visa_type?: string;
   visa_expiry_date?: string;
+  id_card?: string;
+  emergency_contact?: string;
+  emergency_phone?: string;
+  remark?: string;
+  mobile?: string; // 兼容旧字段
   created_at: string;
   updated_at: string;
 }
@@ -227,9 +234,15 @@ export class ApiClient {
       base_ids: data.base_ids || [], // 使用base_ids而不是base_id
       password: data.password,
       join_date: data.join_date,
-      mobile: data.mobile,
+      phone: data.phone,
+      email: data.email,
       passport_number: data.passport_number,
-      visa_expiry_date: data.visa_expiry_date
+      visa_type: data.visa_type,
+      visa_expiry_date: data.visa_expiry_date,
+      id_card: data.id_card,
+      emergency_contact: data.emergency_contact,
+      emergency_phone: data.emergency_phone,
+      remark: data.remark
     };
     
     return this.apiCall<User>('/api/user/create', {
@@ -238,8 +251,19 @@ export class ApiClient {
     });
   }
 
-  async userList(): Promise<User[]> {
-    return this.apiCall<User[]>('/api/user/list');
+  async userList(params?: { name?: string; role?: string; base_id?: number }): Promise<User[]> {
+    const search = new URLSearchParams();
+    if (params?.name) {
+      search.set('name', params.name);
+    }
+    if (params?.role) {
+      search.set('role', params.role);
+    }
+    if (typeof params?.base_id === 'number' && !Number.isNaN(params.base_id)) {
+      search.set('base_id', params.base_id.toString());
+    }
+    const qs = search.toString();
+    return this.apiCall<User[]>(`/api/user/list${qs ? `?${qs}` : ''}`);
   }
 
   async userGet(id: number): Promise<User> {
@@ -256,9 +280,15 @@ export class ApiClient {
       role: data.role,
       base_ids: data.base_ids || [], // 使用base_ids而不是base_id
       join_date: data.join_date,
-      mobile: data.mobile,
+      phone: data.phone,
+      email: data.email,
       passport_number: data.passport_number,
-      visa_expiry_date: data.visa_expiry_date
+      visa_type: data.visa_type,
+      visa_expiry_date: data.visa_expiry_date,
+      id_card: data.id_card,
+      emergency_contact: data.emergency_contact,
+      emergency_phone: data.emergency_phone,
+      remark: data.remark
     };
     
     // 只有在密码不为空时才添加到请求数据中

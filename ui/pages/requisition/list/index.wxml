@@ -1,4 +1,4 @@
-<view class="page">
+<view class="page {{deviceProfileClass}}">
   <block wx:if="{{loading}}">
     <view class="loading">加载中...</view>
   </block>
@@ -38,52 +38,85 @@
 
   <view class="sheet" wx:if="{{formOpen}}">
     <view class="sheet-body">
-      <view class="row between">
+      <view class="sheet-header with-actions">
         <text class="sheet-title">{{form.id ? '编辑物资申领' : '新增物资申领'}}</text>
-        <button size="mini" bindtap="closeForm">关闭</button>
+        <view class="sheet-actions">
+          <button class="btn-secondary" size="mini" style="color: {{themeColor}}; border-color: {{themeColor}};" bindtap="closeForm">取消</button>
+          <button class="btn-primary" size="mini" style="background: {{themeColor}}; border-color: {{themeColor}};" bindtap="save" loading="{{saving}}">保存</button>
+        </view>
       </view>
       <scroll-view scroll-y class="sheet-scroll">
         <view class="cell-group">
-          <view class="cell">
-            <text class="cell-label">基地</text>
-            <picker mode="selector" range="{{basePickerNames}}" value="{{baseIndex}}" bindchange="onBaseChange">
-              <view class="picker">{{basePickerNames[baseIndex]}}</view>
-            </picker>
+          <view class="cell-row">
+            <view class="cell half">
+              <text class="cell-label">基地</text>
+              <picker mode="selector" range="{{basePickerNames}}" value="{{baseIndex}}" bindchange="onBaseChange">
+                <view class="picker">{{basePickerNames[baseIndex]}}</view>
+              </picker>
+            </view>
+            <view class="cell half">
+              <text class="cell-label">申领日期</text>
+              <picker mode="date" value="{{form.request_date}}" bindchange="onDateChange">
+                <view class="picker">{{form.request_date}}</view>
+              </picker>
+            </view>
           </view>
-          <view class="cell">
-            <text class="cell-label">商品</text>
-            <picker mode="selector" range="{{productPickerNames}}" value="{{productIndex}}" bindchange="onProductChange">
-              <view class="picker">{{productPickerNames[productIndex]}}</view>
-            </picker>
+        </view>
+        <view class="form-section">
+          <view class="section-header">
+            <text class="section-title">申领明细</text>
+            <button size="mini" bindtap="addItem" wx:if="{{!form.id}}">新增明细</button>
           </view>
-          <view class="cell">
-            <text class="cell-label">数量</text>
-            <input class="input" type="digit" value="{{form.quantity}}" bindinput="onQuantityInput" placeholder="请输入数量" />
-          </view>
-          <view class="cell">
-            <text class="cell-label">单位</text>
-            <picker mode="selector" range="{{unitPickerNames}}" value="{{unitIndex}}" bindchange="onUnitChange">
-              <view class="picker">{{unitPickerNames[unitIndex] || '请选择单位'}}</view>
-            </picker>
-          </view>
-          <view class="cell">
-            <text class="cell-label">单价</text>
-            <input class="input" type="digit" value="{{form.unit_price}}" bindinput="onPriceInput" placeholder="请输入单价" />
-          </view>
-          <view class="cell">
-            <text class="cell-label">申领日期</text>
-            <picker mode="date" value="{{form.request_date}}" bindchange="onDateChange">
-              <view class="picker">{{form.request_date}}</view>
-            </picker>
+          <view class="section-list">
+            <block wx:for="{{formItems}}" wx:key="index">
+              <view class="item-card">
+                <view class="item-header">
+                  <text>明细 {{index + 1}}</text>
+                  <button size="mini" type="warn" data-index="{{index}}" bindtap="removeItem" wx:if="{{formItems.length > 1}}">删除</button>
+                </view>
+                <view class="item-body">
+                  <view class="item-field">
+                    <text class="cell-label">商品</text>
+                    <picker mode="selector" range="{{productPickerNames}}" value="{{item.productIndex}}" data-index="{{index}}" bindchange="onItemProductChange">
+                      <view class="picker">{{item.productIndex > 0 ? productPickerNames[item.productIndex] : '请选择商品'}}</view>
+                    </picker>
+                  </view>
+                  <view class="item-row">
+                    <view class="item-field half">
+                      <text class="cell-label">数量</text>
+                      <input class="input" type="digit" value="{{item.quantity}}" data-index="{{index}}" bindinput="onItemQuantityInput" placeholder="0" />
+                    </view>
+                    <view class="item-field half">
+                      <text class="cell-label">单位</text>
+                      <picker mode="selector" range="{{item.unitPickerNames}}" value="{{item.unitIndex}}" data-index="{{index}}" bindchange="onItemUnitChange">
+                        <view class="picker">{{item.unitIndex > 0 ? item.unitPickerNames[item.unitIndex] : '选择单位'}}</view>
+                      </picker>
+                    </view>
+                  </view>
+                  <view class="item-row">
+                    <view class="item-field half">
+                      <text class="cell-label">单价</text>
+                      <input class="input" type="digit" value="{{item.unit_price}}" data-index="{{index}}" bindinput="onItemPriceInput" placeholder="0.00" />
+                    </view>
+                    <view class="item-field half">
+                      <text class="cell-label">币种</text>
+                      <picker mode="selector" range="{{currencyOptions}}" value="{{item.currencyIndex}}" data-index="{{index}}" bindchange="onItemCurrencyChange">
+                        <view class="picker">{{currencyOptions[item.currencyIndex] || item.currency}}</view>
+                      </picker>
+                    </view>
+                  </view>
+                  <view class="item-summary">
+                    <text>小计：{{item.currency || 'CNY'}} {{item.subtotalFmt}}</text>
+                  </view>
+                </view>
+              </view>
+            </block>
           </view>
         </view>
         <view class="form-summary">
-          <text>预估总额：{{form.currency || 'CNY'}} {{formTotalFmt}}</text>
+          <text>预估总额：{{formCurrency}} {{formTotalFmt}}</text>
         </view>
       </scroll-view>
-      <view class="sheet-footer">
-        <button class="btn-primary" style="background: {{themeColor}}; border-color: {{themeColor}};" bindtap="save" loading="{{saving}}">保存</button>
-      </view>
     </view>
   </view>
 

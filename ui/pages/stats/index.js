@@ -1,15 +1,45 @@
 const req = require('../../utils/request');
+const theme = require('../../utils/theme');
 const { canAccess } = require('../../utils/role');
 
 Page({
-  data: { start: '', end: '', totalExpense: 0, totalPurchase: 0, expenseByBase: [] },
+  data: {
+    start: '',
+    end: '',
+    totalExpense: 0,
+    totalPurchase: 0,
+    expenseByBase: [],
+    showFallbackNav: false,
+    deviceProfileClass: '',
+    isTablet: false
+  },
   onShow(){
-    const role = (getApp().globalData && getApp().globalData.role) ? getApp().globalData.role : (wx.getStorageSync('role') || '');
+    const app = typeof getApp === 'function' ? getApp() : null;
+    const role = (app && app.globalData && app.globalData.role) ? app.globalData.role : (wx.getStorageSync('role') || '');
     if (!canAccess(role, ['admin'])) {
       wx.showToast({ title: '无权限访问', icon: 'none' });
       setTimeout(() => { wx.switchTab({ url: '/pages/home/index' }); }, 600);
       return;
     }
+    const themeColor = theme.getThemeColor();
+    const tabBar = typeof this.getTabBar === 'function' ? this.getTabBar() : null;
+    const hasTabBar = !!(tabBar && typeof tabBar.refreshTabs === 'function');
+    if (hasTabBar) {
+      if (typeof tabBar.refreshTabs === 'function') { tabBar.refreshTabs(); }
+      if (typeof tabBar.syncWithRoute === 'function') { tabBar.syncWithRoute(); }
+    }
+    const deviceProfileClass = app && app.globalData ? (app.globalData.deviceProfileClass || '') : (wx.getStorageSync('deviceProfileClass') || '');
+    const isTablet = app && app.globalData ? !!app.globalData.isTablet : !!wx.getStorageSync('isTablet');
+    this.setData({ showFallbackNav: !hasTabBar, deviceProfileClass, isTablet });
+    const fallbackNav = this.selectComponent('#fallback-nav');
+    if (!hasTabBar && fallbackNav && typeof fallbackNav.setThemeColor === 'function') {
+      fallbackNav.setThemeColor(themeColor);
+    }
+    wx.setNavigationBarColor({
+      frontColor: '#000000',
+      backgroundColor: '#ffffff',
+      animation: { duration: 0, timingFunc: 'linear' }
+    });
     const t=new Date();
     const start=new Date(t.getFullYear(), t.getMonth(), 1).toISOString().slice(0,10);
     const end=new Date(t.getFullYear(), t.getMonth()+1, 0).toISOString().slice(0,10);

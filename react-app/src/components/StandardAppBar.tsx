@@ -19,6 +19,7 @@ import {
   Menu,
   MenuItem,
   Divider,
+  Container,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import {
@@ -53,6 +54,7 @@ const StandardAppBar: React.FC = () => {
   const isXlUp = useMediaQuery(theme.breakpoints.up('xl'));
   const user = useAuthStore((state) => state.user);
   const isAdmin = user?.role === 'admin';
+  const isWarehouseAdmin = user?.role === 'warehouse_admin';
   const isBaseAgent = user?.role === 'base_agent';
   
   const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
@@ -95,7 +97,7 @@ const StandardAppBar: React.FC = () => {
       label: '基地开支',
       path: '/expense/list',
       icon: <ExpenseIcon />,
-      available: true
+      available: user?.role !== 'warehouse_admin'
     },
     {
       label: '应付款管理',
@@ -107,13 +109,13 @@ const StandardAppBar: React.FC = () => {
       label: '供应商管理',
       path: '/supplier/management',
       icon: <SupplierIcon />,
-      available: isAdmin
+      available: isAdmin || isWarehouseAdmin
     },
     {
       label: '商品管理',
       path: '/product/management',
       icon: <InventoryIcon />,
-      available: isAdmin
+      available: isAdmin || isWarehouseAdmin
     },
     {
       label: '库存管理',
@@ -125,7 +127,7 @@ const StandardAppBar: React.FC = () => {
       label: '采购管理',
       path: '/purchase/list',
       icon: <PurchaseIcon />,
-      available: isAdmin
+      available: isAdmin || isWarehouseAdmin
     },
     {
       label: '统计分析',
@@ -182,15 +184,16 @@ const StandardAppBar: React.FC = () => {
 
   return (
     <AppBar position="fixed" elevation={0} sx={{ backgroundColor: barBg }}>
-      <Toolbar sx={{ display: 'flex', alignItems: 'center', position: 'relative', px: '16px', minHeight: 52 }}>
-        {/* Left side - Back button or Home button */}
-        <Box sx={{ display: 'flex', alignItems: 'center', position: 'absolute', left: '20px' }}>
+      <Container maxWidth="lg" disableGutters>
+        <Toolbar sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: { xs: 1.5, sm: 2 }, minHeight: 52 }}>
+        {/* Left side - Back button & system title */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
           {!isRoot ? (
             <IconButton
               edge="start"
               aria-label="back"
               onClick={handleBackClick}
-              sx={{ marginRight: 1 }}
+              sx={{ mr: 0.5 }}
             >
               <ArrowBackIcon sx={{ color: iconColor }} />
               <Typography variant="body2" sx={{ ml: 1, color: textColor }}>
@@ -202,7 +205,7 @@ const StandardAppBar: React.FC = () => {
               edge="start"
               aria-label="home"
               onClick={() => navigate('/')}
-              sx={{ marginRight: 1 }}
+              sx={{ mr: 1 }}
             >
               <HomeIcon sx={{ color: iconColor }} />
             </IconButton>
@@ -223,9 +226,8 @@ const StandardAppBar: React.FC = () => {
           display: { xs: 'none', md: 'flex' }, 
           alignItems: 'center',
           gap: 0.25,
-          position: 'absolute',
-          left: '50%',
-          transform: 'translateX(-50%)'
+          flexGrow: 1,
+          justifyContent: 'center'
         }}>
           {visibleNavItems.map((item) => {
             const active = isActive(item.path);
@@ -247,6 +249,7 @@ const StandardAppBar: React.FC = () => {
                   borderBottom: active ? '2px solid currentColor' : '2px solid transparent',
                   transition: 'transform 160ms ease, border-color 160ms ease',
                   transformOrigin: 'center',
+                  whiteSpace: 'nowrap',
                   '&:hover': {
                     backgroundColor: 'transparent',
                     transform: 'scale(1.08)'
@@ -274,6 +277,7 @@ const StandardAppBar: React.FC = () => {
                   px: 1,
                   py: 0.25,
                   borderRadius: 8,
+                  whiteSpace: 'nowrap',
                 }}
               >
                 更多
@@ -286,8 +290,8 @@ const StandardAppBar: React.FC = () => {
                 transformOrigin={{ vertical: 'top', horizontal: 'center' }}
               >
                 {overflowNavItems.map((item) => (
-                  <MenuItem key={item.path} onClick={() => { navigate(item.path); setMoreAnchor(null); }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <MenuItem key={item.path} onClick={() => { navigate(item.path); setMoreAnchor(null); }} sx={{ whiteSpace: 'nowrap' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, whiteSpace: 'nowrap' }}>
                       {item.icon}
                       {item.label}
                     </Box>
@@ -298,8 +302,8 @@ const StandardAppBar: React.FC = () => {
           )}
         </Box>
 
-        {/* Right side - Menu for mobile and User Menu */}
-        <Box sx={{ display: 'flex', alignItems: 'center', position: 'absolute', right: '20px' }}>
+        {/* Right side - Theme toggle, mobile menu & user menu */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
           {/* Theme toggle */}
           <Tooltip title={darkMode ? '切换到亮色' : '切换到暗色'}>
             <IconButton onClick={toggleDarkMode} sx={{ color: iconColor, mr: 0.5 }}>
@@ -334,9 +338,9 @@ const StandardAppBar: React.FC = () => {
                   <MenuItem
                     key={item.path}
                     onClick={() => handleNavigate(item.path)}
-                    sx={{ minWidth: 180, fontWeight: active ? 700 : 500 }}
+                    sx={{ minWidth: 180, fontWeight: active ? 700 : 500, whiteSpace: 'nowrap' }}
                   >
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, whiteSpace: 'nowrap' }}>
                       {item.icon}
                       {item.label}
                     </Box>
@@ -353,7 +357,8 @@ const StandardAppBar: React.FC = () => {
           {/* User Menu */}
           <UserMenu />
         </Box>
-      </Toolbar>
+        </Toolbar>
+      </Container>
     </AppBar>
   );
 };

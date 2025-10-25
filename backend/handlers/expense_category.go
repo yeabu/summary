@@ -7,7 +7,25 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 )
+
+type expenseCategoryReq struct {
+	Name   string  `json:"name"`
+	Code   *string `json:"code"`
+	Status string  `json:"status"`
+}
+
+func normalizeCode(codePtr *string) *string {
+	if codePtr == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*codePtr)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
 
 // 创建费用类别
 func CreateExpenseCategory(w http.ResponseWriter, r *http.Request) {
@@ -24,28 +42,38 @@ func CreateExpenseCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var category models.ExpenseCategory
-	if err := json.NewDecoder(r.Body).Decode(&category); err != nil {
+	var payload expenseCategoryReq
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		http.Error(w, "参数错误", http.StatusBadRequest)
 		return
 	}
 
 	// 验证必填字段
-	if category.Name == "" {
+	name := strings.TrimSpace(payload.Name)
+	if name == "" {
 		http.Error(w, "类别名称不能为空", http.StatusBadRequest)
 		return
 	}
 
 	// 检查是否已存在同名类别
 	var existingCategory models.ExpenseCategory
-	if err := db.DB.Where("name = ?", category.Name).First(&existingCategory).Error; err == nil {
+	if err := db.DB.Where("name = ?", name).First(&existingCategory).Error; err == nil {
 		http.Error(w, "已存在同名的费用类别", http.StatusBadRequest)
 		return
 	}
 
 	// 设置默认状态
-	if category.Status == "" {
-		category.Status = "active"
+	status := strings.TrimSpace(payload.Status)
+	if status == "" {
+		status = "active"
+	}
+
+	category := models.ExpenseCategory{
+		Name:   name,
+		Status: status,
+	}
+	if code := normalizeCode(payload.Code); code != nil {
+		category.Code = code
 	}
 
 	// 创建费用类别
@@ -136,30 +164,30 @@ func UpdateExpenseCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var updateData models.ExpenseCategory
-	if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
+	var payload expenseCategoryReq
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		http.Error(w, "参数错误", http.StatusBadRequest)
 		return
 	}
 
 	// 检查名称唯一性（如果名称被修改）
-	if updateData.Name != "" && updateData.Name != category.Name {
+	if strings.TrimSpace(payload.Name) != "" && strings.TrimSpace(payload.Name) != category.Name {
 		var existingCategory models.ExpenseCategory
-		if err := db.DB.Where("name = ? AND id != ?", updateData.Name, id).First(&existingCategory).Error; err == nil {
+		if err := db.DB.Where("name = ? AND id != ?", strings.TrimSpace(payload.Name), id).First(&existingCategory).Error; err == nil {
 			http.Error(w, "已存在同名的费用类别", http.StatusBadRequest)
 			return
 		}
 	}
 
 	// 更新字段
-	if updateData.Name != "" {
-		category.Name = updateData.Name
+	if strings.TrimSpace(payload.Name) != "" {
+		category.Name = strings.TrimSpace(payload.Name)
 	}
-	if updateData.Code != "" {
-		category.Code = updateData.Code
+	if payload.Code != nil {
+		category.Code = normalizeCode(payload.Code)
 	}
-	if updateData.Status != "" {
-		category.Status = updateData.Status
+	if strings.TrimSpace(payload.Status) != "" {
+		category.Status = strings.TrimSpace(payload.Status)
 	}
 
 	if err := db.DB.Save(&category).Error; err != nil {

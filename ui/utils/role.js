@@ -1,5 +1,6 @@
 const ROLE_LABELS = {
   admin: '管理员',
+  warehouse_admin: '仓库管理员',
   base_agent: '基地代理',
   captain: '队长',
   finance: '财务主管',

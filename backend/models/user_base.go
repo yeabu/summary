@@ -2,6 +2,9 @@ package models
 
 import (
 	"time"
+
+	"backend/idgen"
+	"gorm.io/gorm"
 )
 
 // UserBase 用户与基地关联模型
@@ -19,4 +22,16 @@ type UserBase struct {
 // TableName 指定表名
 func (UserBase) TableName() string {
 	return "user_bases"
+}
+
+func (ub *UserBase) BeforeCreate(tx *gorm.DB) error {
+	if ub.ID != 0 {
+		return nil
+	}
+	id, err := idgen.NextIDUint()
+	if err != nil {
+		return err
+	}
+	ub.ID = id
+	return nil
 }

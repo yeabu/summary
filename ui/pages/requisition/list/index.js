@@ -3,6 +3,8 @@ const theme = require('../../../utils/theme');
 const { canAccess } = require('../../../utils/role');
 const { apiBase } = require('../../../config');
 
+const DEFAULT_CURRENCIES = ['CNY', 'LAK', 'USD', 'THB'];
+
 function formatAmount(value) {
   const num = Number(value);
   if (!Number.isFinite(num)) return '0.00';
@@ -20,12 +22,24 @@ function createEmptyForm() {
   return {
     id: '',
     base_id: '',
+    request_date: today
+  };
+}
+
+function createEmptyItem() {
+  return {
     product_id: '',
+    productIndex: 0,
     quantity: '',
     unit: '',
     unit_price: '',
-    request_date: today,
-    currency: 'CNY'
+    unitOptions: [],
+    unitPickerNames: ['请选择单位'],
+    unitIndex: 0,
+    currency: 'CNY',
+    currencyIndex: 0,
+    subtotal: 0,
+    subtotalFmt: '0.00'
   };
 }
 
@@ -39,17 +53,16 @@ Page({
     baseIndex: 0,
     products: [],
     productPickerNames: ['请选择商品'],
-    productIndex: 0,
-    unitOptions: [],
-    unitPickerNames: ['请选择单位'],
-    unitIndex: 0,
     productMap: {},
     purchaseParamCache: {},
     unitSpecCache: {},
     formOpen: false,
     form: createEmptyForm(),
+    formItems: [],
+    formCurrency: 'CNY',
     formTotal: 0,
     formTotalFmt: '0.00',
+    currencyOptions: DEFAULT_CURRENCIES,
     saving: false,
     fabStyle: ''
   },
@@ -109,7 +122,8 @@ Page({
         requesterName: rec.requester && rec.requester.name ? rec.requester.name : '',
         receipt_path: rec.receipt_path || '',
         base_id: rec.base_id,
-        product_id: rec.product_id
+        product_id: rec.product_id,
+        unit: rec.unit || ''
       }));
       this.setData({
         bases,
@@ -135,12 +149,12 @@ Page({
       formOpen: true,
       form,
       baseIndex: 0,
-      productIndex: 0,
-      unitOptions: [],
-      unitPickerNames: ['请选择单位'],
-      unitIndex: 0,
+      formItems: [createEmptyItem()],
+      formCurrency: 'CNY',
       formTotal: 0,
       formTotalFmt: '0.00'
+    }, () => {
+      this.updateFormTotals();
     });
   },
   closeForm() {
@@ -155,68 +169,78 @@ Page({
     const base = this.data.bases[idx - 1];
     this.setData({ baseIndex: idx, 'form.base_id': base ? base.id : '' });
   },
-  async onProductChange(e) {
+  async onItemProductChange(e) {
     const idx = Number(e.detail.value || 0);
+    const itemIndex = Number(e.currentTarget.dataset.index);
+    const items = this.data.formItems.slice();
+    const item = items[itemIndex];
+    if (!item) return;
     if (idx <= 0) {
-      this.setData({
-        productIndex: 0,
-        'form.product_id': '',
-        unitOptions: [],
-        unitPickerNames: ['请选择单位'],
-        unitIndex: 0,
-        'form.unit': '',
-        'form.unit_price': '',
-        'form.currency': 'CNY'
-      });
+    items[itemIndex] = Object.assign({}, item, {
+      product_id: '',
+      productIndex: 0,
+      unit: '',
+      unit_price: '',
+      unitOptions: [],
+      unitPickerNames: ['请选择单位'],
+      unitIndex: 0,
+      currency: 'CNY',
+      currencyIndex: 0,
+      subtotal: 0,
+      subtotalFmt: '0.00'
+    });
+      this.setData({ formItems: items });
       this.updateFormTotals();
       return;
     }
     const product = this.data.products[idx - 1];
     if (!product) return;
-    const updates = {
+    const currencyOptions = this.data.currencyOptions || DEFAULT_CURRENCIES;
+    items[itemIndex] = Object.assign({}, item, {
+      product_id: product.id,
       productIndex: idx,
-      'form.product_id': product.id,
-      'form.currency': product.currency
-    };
-    this.setData(updates);
-    await this.applyProductDefaults(product);
+      currency: product.currency || 'CNY',
+      currencyIndex: Math.max(0, currencyOptions.indexOf(product.currency || 'CNY'))
+    });
+    this.setData({ formItems: items });
+    await this.applyItemDefaults(itemIndex, product);
   },
-  async applyProductDefaults(product) {
+  async applyItemDefaults(itemIndex, product) {
     if (!product || !product.id) return;
-    let [unitOptions, purchaseParam] = await Promise.all([
+    const [unitOptionsRaw, purchaseParam] = await Promise.all([
       this.ensureUnitOptions(product.id, product),
       this.ensurePurchaseParam(product.id)
     ]);
-    const collected = new Set(unitOptions || []);
-    if (purchaseParam && purchaseParam.unit) { collected.add(purchaseParam.unit); }
-    let unit = this.data.form.unit;
-    if (!unit) {
-      if (purchaseParam && purchaseParam.unit) {
-        unit = purchaseParam.unit;
-      } else if (unitOptions.length > 0) {
-        unit = unitOptions[0];
-      } else {
-        unit = product.base_unit || '';
-      }
-    }
-    if (unit) { collected.add(unit); }
-    unitOptions = Array.from(collected).filter(Boolean);
+    const collected = new Set(unitOptionsRaw || []);
+    if (purchaseParam && purchaseParam.unit) collected.add(purchaseParam.unit);
+    if (product.base_unit) collected.add(product.base_unit);
+    const items = this.data.formItems.slice();
+    const existingItem = items[itemIndex] || {};
+    if (existingItem.unit) collected.add(existingItem.unit);
+    const unitOptions = Array.from(collected).filter(Boolean);
+    let unit = existingItem.unit || (purchaseParam && purchaseParam.unit ? purchaseParam.unit : (unitOptions[0] || product.base_unit || ''));
     const unitPrice = (purchaseParam && purchaseParam.purchase_price > 0)
       ? purchaseParam.purchase_price
       : (Number(product.unit_price) || 0);
-    const currency = purchaseParam && purchaseParam.currency ? purchaseParam.currency : product.currency;
+    const currency = existingItem.currency || (purchaseParam && purchaseParam.currency ? purchaseParam.currency : (product.currency || 'CNY'));
     const pickerList = ['请选择单位'].concat(unitOptions);
     const idx = unit ? unitOptions.indexOf(unit) : -1;
     const unitIndex = idx >= 0 ? idx + 1 : 0;
-    this.setData({
+    const item = items[itemIndex];
+    if (!item) return;
+    items[itemIndex] = Object.assign({}, item, {
       unitOptions,
       unitPickerNames: pickerList,
       unitIndex,
-      'form.unit': unit,
-      'form.unit_price': unitPrice > 0 ? unitPrice : '',
-      'form.currency': currency || 'CNY'
+      unit,
+      unit_price: unitPrice > 0 ? unitPrice : '',
+      currency,
+      currencyIndex: Math.max(0, this.data.currencyOptions.indexOf(currency))
     });
-    this.updateFormTotals();
+    this.setData({ formItems: items }, () => {
+      this.updateItemSubtotal(itemIndex);
+      this.updateFormTotals();
+    });
   },
   async ensurePurchaseParam(productId) {
     const cache = this.data.purchaseParamCache || {};
@@ -274,66 +298,162 @@ Page({
     cached.forEach(u => { if (u) collected.add(u); });
     return Array.from(collected);
   },
-  onUnitChange(e) {
+  onItemUnitChange(e) {
     const idx = Number(e.detail.value || 0);
-    if (!this.data.unitPickerNames || this.data.unitPickerNames.length === 0) {
-      return;
-    }
+    const itemIndex = Number(e.currentTarget.dataset.index);
+    const items = this.data.formItems.slice();
+    const item = items[itemIndex];
+    if (!item) return;
     if (idx <= 0) {
-      this.setData({ unitIndex: 0, 'form.unit': '' });
-      return;
+      items[itemIndex] = Object.assign({}, item, { unitIndex: 0, unit: '' });
+    } else {
+      const unit = item.unitPickerNames[idx] || '';
+      items[itemIndex] = Object.assign({}, item, { unitIndex: idx, unit });
     }
-    const unit = this.data.unitPickerNames[idx];
-    this.setData({ unitIndex: idx, 'form.unit': unit });
+    this.setData({ formItems: items });
   },
-  onQuantityInput(e) {
-    this.setData({ 'form.quantity': e.detail.value });
-    this.updateFormTotals();
+  onItemQuantityInput(e) {
+    const itemIndex = Number(e.currentTarget.dataset.index);
+    const value = e.detail.value;
+    const items = this.data.formItems.slice();
+    const item = items[itemIndex];
+    if (!item) return;
+    items[itemIndex] = Object.assign({}, item, { quantity: value });
+    this.setData({ formItems: items }, () => {
+      this.updateItemSubtotal(itemIndex);
+      this.updateFormTotals();
+    });
   },
-  onPriceInput(e) {
-    this.setData({ 'form.unit_price': e.detail.value });
-    this.updateFormTotals();
+  onItemPriceInput(e) {
+    const itemIndex = Number(e.currentTarget.dataset.index);
+    const value = e.detail.value;
+    const items = this.data.formItems.slice();
+    const item = items[itemIndex];
+    if (!item) return;
+    items[itemIndex] = Object.assign({}, item, { unit_price: value });
+    this.setData({ formItems: items }, () => {
+      this.updateItemSubtotal(itemIndex);
+      this.updateFormTotals();
+    });
+  },
+  onItemCurrencyChange(e) {
+    const itemIndex = Number(e.currentTarget.dataset.index);
+    const idx = Number(e.detail.value || 0);
+    const items = this.data.formItems.slice();
+    const item = items[itemIndex];
+    if (!item) return;
+    const currency = this.data.currencyOptions[idx] || item.currency || 'CNY';
+    items[itemIndex] = Object.assign({}, item, {
+      currencyIndex: idx,
+      currency
+    });
+    this.setData({ formItems: items }, () => {
+      this.updateItemSubtotal(itemIndex);
+      this.updateFormTotals();
+    });
   },
   onDateChange(e) {
     this.setData({ 'form.request_date': e.detail.value });
   },
+  addItem() {
+    const items = this.data.formItems.slice();
+    items.push(createEmptyItem());
+    this.setData({ formItems: items }, () => {
+      this.updateFormTotals();
+    });
+  },
+  removeItem(e) {
+    const idx = Number(e.currentTarget.dataset.index);
+    const items = this.data.formItems.slice();
+    if (items.length <= 1) return;
+    items.splice(idx, 1);
+    this.setData({ formItems: items }, () => {
+      this.updateFormTotals();
+    });
+  },
+  updateItemSubtotal(index) {
+    const items = this.data.formItems.slice();
+    const item = items[index];
+    if (!item) return;
+    const qty = Number(item.quantity) || 0;
+    const price = Number(item.unit_price) || 0;
+    const subtotal = qty * price;
+    items[index] = Object.assign({}, item, {
+      subtotal,
+      subtotalFmt: formatAmount(subtotal || 0)
+    });
+    this.setData({ formItems: items });
+  },
   updateFormTotals() {
-    const qty = Number(this.data.form.quantity) || 0;
-    const price = Number(this.data.form.unit_price) || 0;
-    const total = qty * price;
+    const items = this.data.formItems || [];
+    let total = 0;
+    let currency = '';
+    items.forEach((item) => {
+      const subtotal = Number(item.subtotal);
+      const derived = Number.isFinite(subtotal) ? subtotal : (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
+      total += derived;
+      if (!currency) {
+        currency = item.currency || 'CNY';
+      } else if (currency !== item.currency) {
+        currency = '多币种';
+      }
+    });
     this.setData({
       formTotal: total,
-      formTotalFmt: formatAmount(total || 0)
+      formTotalFmt: formatAmount(total || 0),
+      formCurrency: currency || 'CNY'
     });
   },
   validateForm() {
     const form = this.data.form;
     if (!form.base_id) { wx.showToast({ title: '请选择基地', icon: 'none' }); return false; }
-    if (!form.product_id) { wx.showToast({ title: '请选择商品', icon: 'none' }); return false; }
-    const qty = Number(form.quantity);
-    if (!(Number.isFinite(qty) && qty > 0)) { wx.showToast({ title: '请输入有效数量', icon: 'none' }); return false; }
-    const price = Number(form.unit_price);
-    if (!(Number.isFinite(price) && price > 0)) { wx.showToast({ title: '请输入有效单价', icon: 'none' }); return false; }
+    if (!form.request_date) { wx.showToast({ title: '请选择日期', icon: 'none' }); return false; }
+    const items = this.data.formItems || [];
+    if (!items.length) { wx.showToast({ title: '请添加申领明细', icon: 'none' }); return false; }
+    for (let i = 0; i < items.length; i += 1) {
+      const item = items[i];
+      if (!item.product_id) { wx.showToast({ title: `明细${i + 1}请选择商品`, icon: 'none' }); return false; }
+      const qty = Number(item.quantity);
+      if (!(Number.isFinite(qty) && qty > 0)) { wx.showToast({ title: `明细${i + 1}数量无效`, icon: 'none' }); return false; }
+      const price = Number(item.unit_price);
+      if (!(Number.isFinite(price) && price > 0)) { wx.showToast({ title: `明细${i + 1}单价无效`, icon: 'none' }); return false; }
+    }
     return true;
   },
   async save() {
     if (!this.validateForm()) return;
     const form = this.data.form;
-    const payload = {
-      base_id: Number(form.base_id),
-      product_id: Number(form.product_id),
-      quantity: Number(form.quantity),
-      unit: form.unit ? String(form.unit) : undefined,
-      unit_price: Number(form.unit_price),
-      request_date: form.request_date || undefined
-    };
+    const items = this.data.formItems || [];
     this.setData({ saving: true });
     try {
       if (form.id) {
+        const item = items[0];
+        const payload = {
+          base_id: Number(form.base_id),
+          product_id: Number(item.product_id),
+          quantity: Number(item.quantity),
+          unit: item.unit ? String(item.unit) : undefined,
+          unit_price: Number(item.unit_price),
+          currency: item.currency || 'CNY',
+          request_date: form.request_date || undefined
+        };
         await req.put('/api/inventory/requisition/update?id=' + form.id, payload);
         wx.showToast({ title: '已更新', icon: 'success' });
       } else {
-        await req.post('/api/inventory/requisition/create', payload);
+        for (let i = 0; i < items.length; i += 1) {
+          const item = items[i];
+          const payload = {
+            base_id: Number(form.base_id),
+            product_id: Number(item.product_id),
+            quantity: Number(item.quantity),
+            unit: item.unit ? String(item.unit) : undefined,
+            unit_price: Number(item.unit_price),
+            currency: item.currency || 'CNY',
+            request_date: form.request_date || undefined
+          };
+          // eslint-disable-next-line no-await-in-loop
+          await req.post('/api/inventory/requisition/create', payload);
+        }
         wx.showToast({ title: '已创建', icon: 'success' });
       }
       this.setData({ formOpen: false });
@@ -355,25 +475,31 @@ Page({
     const form = Object.assign(createEmptyForm(), {
       id: item.id,
       base_id: item.base_id,
-      product_id: item.product_id,
-      quantity: item.quantityBase,
-      unit_price: item.unitPrice,
-      request_date: item.requestDate || createEmptyForm().request_date,
-      currency: item.currency
+      request_date: item.requestDate || createEmptyForm().request_date
     });
+    const entry = createEmptyItem();
+    entry.product_id = item.product_id;
+    entry.productIndex = productIndex > 0 ? productIndex : 0;
+    entry.quantity = String(item.quantityBase || '');
+    entry.unit_price = item.unitPrice;
+    entry.unit = item.unit || '';
+    entry.currency = item.currency || 'CNY';
+    entry.currencyIndex = Math.max(0, this.data.currencyOptions.indexOf(entry.currency));
+    entry.subtotal = Number(item.totalAmount) || 0;
+    entry.subtotalFmt = item.totalAmountFmt || formatAmount(entry.subtotal);
     this.setData({
       formOpen: true,
       form,
       baseIndex: baseIndex > 0 ? baseIndex : 0,
-      productIndex: productIndex > 0 ? productIndex : 0,
-      unitOptions: [],
-      unitIndex: 0,
+      formItems: [entry],
+      formCurrency: entry.currency,
       formTotal: Number(item.totalAmount) || 0,
       formTotalFmt: item.totalAmountFmt || formatAmount(item.totalAmount)
     });
     if (product) {
-      await this.applyProductDefaults(product);
+      await this.applyItemDefaults(0, product);
     }
+    this.updateFormTotals();
   },
   onDelete(e) {
     const id = Number(e.currentTarget.dataset.id);

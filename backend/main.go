@@ -2,6 +2,7 @@ package main
 
 import (
 	"backend/db"
+	"backend/idgen"
 	"backend/models"
 	"backend/routes"
 	"bufio"
@@ -56,9 +57,11 @@ func main() {
 	// 加载 .env 文件
 	loadEnv()
 
+	idgen.MustInitFromEnv()
 	db.Init()
 	db.DB.AutoMigrate(
 		&models.User{},
+		&models.UserBase{},
 		&models.Base{},
 		&models.BaseSection{},
 		&models.Product{},
@@ -73,8 +76,8 @@ func main() {
 		&models.Supplier{},
 		&models.MaterialRequisition{},
 		&models.ExchangeRate{},
-		&models.UserBase{},
 	)
+	ensureUserBaseSchema()
 
 	// Seed default exchange rates if missing
 	// LAK:CNY = 3000:1 => 1 LAK = 1/3000 CNY
@@ -114,4 +117,41 @@ func main() {
 	handler := corsMiddleware(routes.SetupRouter())
 	log.Println("Go backend started: http://localhost" + addr)
 	log.Fatal(http.ListenAndServe(addr, handler))
+}
+
+func ensureUserBaseSchema() {
+	migrator := db.DB.Migrator()
+	if !migrator.HasTable(&models.UserBase{}) {
+		if err := migrator.CreateTable(&models.UserBase{}); err != nil {
+			log.Println("error: failed to create user_bases table:", err)
+			return
+		}
+		log.Println("info: created user_bases table")
+	}
+
+	if !migrator.HasColumn(&models.UserBase{}, "created_at") {
+		if err := migrator.AddColumn(&models.UserBase{}, "CreatedAt"); err != nil {
+			log.Println("error: add user_bases.created_at column failed:", err)
+		} else {
+			log.Println("info: added user_bases.created_at column")
+		}
+	}
+	if !migrator.HasColumn(&models.UserBase{}, "updated_at") {
+		if err := migrator.AddColumn(&models.UserBase{}, "UpdatedAt"); err != nil {
+			log.Println("error: add user_bases.updated_at column failed:", err)
+		} else {
+			log.Println("info: added user_bases.updated_at column")
+		}
+	}
+
+	if !migrator.HasColumn(&models.UserBase{}, "id") {
+		log.Println("info: user_bases.id column missing — snowflake IDs expect a BIGINT column; please add one manually when ready.")
+	}
+	if !migrator.HasIndex(&models.UserBase{}, "idx_user_base") {
+		if err := migrator.CreateIndex(&models.UserBase{}, "idx_user_base"); err != nil {
+			log.Println("error: create user_bases idx_user_base index failed:", err)
+		} else {
+			log.Println("info: ensured user_bases idx_user_base unique index")
+		}
+	}
 }

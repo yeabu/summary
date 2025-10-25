@@ -14,14 +14,14 @@ const tileGradientPairs = [
 ];
 
 const TILE_CONFIGS = [
-  { key: 'expense', label: '开支管理', icon: '/assets/home/expense.png', url: '/pages/expense/list/index', type: 'tab', roles: ['any'] },
-  { key: 'calendar', label: '我的日历', icon: '/assets/home/calendar.png', url: '/pages/calendar/index', type: 'page', roles: ['any'] },
-  { key: 'inventory', label: '库存管理', icon: '/assets/home/inventory.png', url: '/pages/inventory/list/index', type: 'tab', roles: ['admin', 'base_agent'] },
+  { key: 'expense', label: '开支管理', icon: '/assets/home/expense.png', url: '/pages/expense/list/index', type: 'tab', roles: ['any'], skipFor: ['warehouse_admin'] },
+  { key: 'calendar', label: '我的日历', icon: '/assets/home/calendar.png', url: '/pages/calendar/index', type: 'page', roles: ['any'], skipFor: ['warehouse_admin'] },
+  { key: 'inventory', label: '库存管理', icon: '/assets/home/inventory.png', url: '/pages/inventory/list/index', type: 'tab', roles: ['admin', 'warehouse_admin', 'base_agent'] },
   { key: 'requisition', label: '物资申领', icon: '/assets/home/inventory.png', url: '/pages/requisition/list/index', type: 'page', roles: ['admin', 'base_agent'] },
   { key: 'payable', label: '应付款管理', icon: '/assets/home/payable.png', url: '/pages/payable/list/index', type: 'page', roles: ['admin'] },
-  { key: 'supplier', label: '供应商管理', icon: '/assets/home/supplier.png', url: '/pages/supplier/list/index', type: 'page', roles: ['admin'] },
-  { key: 'product', label: '商品管理', icon: '/assets/home/product.png', url: '/pages/product/list/index', type: 'page', roles: ['admin'] },
-  { key: 'purchase', label: '采购管理', icon: '/assets/home/purchase.png', url: '/pages/purchase/list/index', type: 'page', roles: ['admin'] },
+  { key: 'supplier', label: '供应商管理', icon: '/assets/home/supplier.png', url: '/pages/supplier/list/index', type: 'page', roles: ['admin', 'warehouse_admin'] },
+  { key: 'product', label: '商品管理', icon: '/assets/home/product.png', url: '/pages/product/list/index', type: 'page', roles: ['admin', 'warehouse_admin'] },
+  { key: 'purchase', label: '采购管理', icon: '/assets/home/purchase.png', url: '/pages/purchase/list/index', type: 'page', roles: ['admin', 'warehouse_admin'] },
   { key: 'base', label: '基地管理', icon: '/assets/home/base.png', url: '/pages/base/list/index', type: 'page', roles: ['admin'] },
   { key: 'stats', label: '统计分析', icon: '/assets/home/stats.png', url: '/pages/stats/index', type: 'page', roles: ['admin'] },
   { key: 'user', label: '人员管理', icon: '/assets/home/user.png', url: '/pages/user/list/index', type: 'page', roles: ['admin', 'base_agent'] },
@@ -52,7 +52,7 @@ function buildTiles(role, themeColor) {
   const backgrounds = buildTileBackgrounds(themeColor);
   const tiles = [];
   TILE_CONFIGS.forEach(cfg => {
-    if (canAccess(role, cfg.roles)) {
+    if (canAccess(role, cfg.roles) && (!cfg.skipFor || !cfg.skipFor.includes(role))) {
       tiles.push({
         key: cfg.key,
         label: cfg.label,
@@ -73,12 +73,14 @@ Page({
     welcomeStyle: buildWelcomeStyle(defaultThemeColor),
     noticeStyle: buildNoticeStyle(defaultThemeColor),
     tileIconColor: defaultThemeColor,
-    tiles: buildTiles('', defaultThemeColor)
+    tiles: buildTiles('', defaultThemeColor),
+    showFallbackNav: false
   },
   onShow() {
     const tabBar = typeof this.getTabBar === 'function' ? this.getTabBar() : null;
+    const hasTabBar = !!(tabBar && typeof tabBar.refreshTabs === 'function');
     const themeColor = theme.getThemeColor();
-    if (tabBar) {
+    if (hasTabBar) {
       if (typeof tabBar.refreshTabs === 'function') { tabBar.refreshTabs(); }
       if (typeof tabBar.syncWithRoute === 'function') { tabBar.syncWithRoute(); }
       if (typeof tabBar.setThemeColor === 'function') { tabBar.setThemeColor(themeColor); }
@@ -95,7 +97,8 @@ Page({
       welcomeStyle: buildWelcomeStyle(themeColor),
       noticeStyle: buildNoticeStyle(themeColor),
       tileIconColor: themeColor,
-      tiles
+      tiles,
+      showFallbackNav: !hasTabBar
     });
   },
   onTileTap(e) {

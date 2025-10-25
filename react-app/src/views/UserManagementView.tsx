@@ -103,7 +103,7 @@ const UserManagementView: React.FC = () => {
     setLoading(true);
     setError('');
     try {
-      const params: any = {};
+      const params: { name?: string; role?: string; base_id?: number } = {};
       if (searchName.trim()) {
         params.name = searchName.trim();
       }
@@ -111,22 +111,33 @@ const UserManagementView: React.FC = () => {
         params.role = roleFilter;
       }
       if (baseFilter) {
-        params.base_id = bases.find((b: Base) => b.name === baseFilter)?.id; // 使用base_id而不是base
+        const matchedBase = bases.find((b: Base) => b.name === baseFilter || String(b.id) === baseFilter);
+        if (matchedBase?.id !== undefined) {
+          params.base_id = matchedBase.id;
+        } else if (!Number.isNaN(Number(baseFilter))) {
+          params.base_id = Number(baseFilter);
+        }
       }
 
       // 使用实例方法而不是静态方法
-      const response = await apiClient.userList();
+      const response = await apiClient.userList(params);
       // 类型转换：将ApiClient.User[]转换为AppDtos.User[]
       const appDtosUsers: User[] = response.map(user => ({
         id: user.id,
         name: user.name,
-        role: user.role as 'admin' | 'base_agent' | 'captain' | 'factory_manager',
+        role: user.role as 'admin' | 'warehouse_admin' | 'base_agent' | 'captain' | 'factory_manager',
         bases: user.bases || [], // 使用bases字段而不是base字段
         base_ids: user.base_ids || [], // 添加base_ids字段
         join_date: user.join_date,
-        mobile: user.mobile,
+        phone: user.phone || (user as any).mobile,
+        email: user.email,
         passport_number: user.passport_number,
+        visa_type: user.visa_type,
         visa_expiry_date: user.visa_expiry_date,
+        id_card: user.id_card,
+        emergency_contact: user.emergency_contact,
+        emergency_phone: user.emergency_phone,
+        remark: user.remark,
         created_at: user.created_at,
         updated_at: user.updated_at
       }));
@@ -158,18 +169,29 @@ const UserManagementView: React.FC = () => {
     setEditDialogOpen(true);
   };
 
+  const toOptionalString = (value?: string | null) => {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : undefined;
+  };
+
   const handleSubmit = async (userData: User) => {
     setSubmitting(true);
     try {
       // 创建符合ApiClient.User类型的数据对象
       const apiUserData = {
-        name: userData.name,
+        name: userData.name.trim(),
         role: userData.role,
         base_ids: userData.bases?.map(base => base.id).filter(id => id !== undefined) as number[] || [], // 使用bases提取base_ids并过滤undefined值
-        join_date: userData.join_date,
-        mobile: userData.mobile,
-        passport_number: userData.passport_number,
-        visa_expiry_date: userData.visa_expiry_date
+        join_date: toOptionalString(userData.join_date),
+        phone: toOptionalString(userData.phone),
+        email: toOptionalString(userData.email),
+        passport_number: toOptionalString(userData.passport_number),
+        visa_type: toOptionalString(userData.visa_type),
+        visa_expiry_date: toOptionalString(userData.visa_expiry_date),
+        id_card: toOptionalString(userData.id_card),
+        emergency_contact: toOptionalString(userData.emergency_contact),
+        emergency_phone: toOptionalString(userData.emergency_phone),
+        remark: toOptionalString(userData.remark)
       };
     
       if (editingUser?.id) {
@@ -180,7 +202,7 @@ const UserManagementView: React.FC = () => {
         // 添加密码字段用于创建新用户
         const newUser = {
           ...apiUserData,
-          password: userData.password || ''
+          password: userData.password?.trim() || ''
         };
         // 使用实例方法而不是静态方法
         await apiClient.userCreate(newUser);
@@ -332,6 +354,8 @@ const UserManagementView: React.FC = () => {
     switch (role) {
       case 'admin':
         return <Chip label="管理员" color="primary" size="small" />;
+      case 'warehouse_admin':
+        return <Chip label="仓库管理员" color="info" size="small" />;
       case 'base_agent':
         return <Chip label="基地代理" color="secondary" size="small" />;
       case 'captain':
@@ -403,6 +427,7 @@ const UserManagementView: React.FC = () => {
         >
           <MenuItem value="">全部角色</MenuItem>
           <MenuItem value="admin">管理员</MenuItem>
+          <MenuItem value="warehouse_admin">仓库管理员</MenuItem>
           <MenuItem value="base_agent">基地代理</MenuItem>
           <MenuItem value="captain">队长</MenuItem>
           <MenuItem value="factory_manager">厂长</MenuItem>
@@ -469,7 +494,7 @@ const UserManagementView: React.FC = () => {
                 <TableCell>{getRoleChip(user.role)}</TableCell>
                 <TableCell>{user.bases?.map(base => base.name).join(', ') || '-'}</TableCell>
                 <TableCell>{user.join_date ? new Date(user.join_date).toLocaleDateString() : '-'}</TableCell>
-                <TableCell>{user.mobile || '-'}</TableCell>
+                <TableCell>{user.phone || '-'}</TableCell>
                 <TableCell align="right">
                   <Tooltip title="编辑">
                     <IconButton size="small" onClick={() => handleEdit(user)}>

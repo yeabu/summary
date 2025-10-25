@@ -1,4 +1,4 @@
-<view class="tab-bar">
+<view class="tab-bar {{deviceProfileClass}}">
   <view class="tab-items">
     <view
       class="tab-item"

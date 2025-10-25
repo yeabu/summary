@@ -3,12 +3,13 @@ const theme = require('../../utils/theme');
 const { getRoleLabel } = require('../../utils/role');
 
 Page({
-  data: { role: '', roleLabel: '佳慧伙伴', oldPwd: '', newPwd: '', loading: false, langs:['中文','English'], langIndex:0, themeColors: ['#B4282D', '#1C6DD0', '#07C160', '#FFC53D'], themeActiveColor: '#B4282D' },
+  data: { role: '', roleLabel: '佳慧伙伴', oldPwd: '', newPwd: '', loading: false, langs:['中文','English'], langIndex:0, themeColors: ['#B4282D', '#1C6DD0', '#07C160', '#FFC53D'], themeActiveColor: '#B4282D', showFallbackNav: false },
   onShow(){
     const app = getApp();
     const themeColor = theme.getThemeColor();
     const tabBar = typeof this.getTabBar === 'function' ? this.getTabBar() : null;
-    if (tabBar) {
+    const hasTabBar = !!(tabBar && typeof tabBar.refreshTabs === 'function');
+    if (hasTabBar) {
       if (typeof tabBar.refreshTabs === 'function') { tabBar.refreshTabs(); }
       if (typeof tabBar.syncWithRoute === 'function') { tabBar.syncWithRoute(); }
       if (typeof tabBar.setThemeColor === 'function') { tabBar.setThemeColor(themeColor); }
@@ -16,7 +17,7 @@ Page({
     const role = (app && app.globalData && app.globalData.role) ? app.globalData.role : (wx.getStorageSync('role') || '');
     const roleLabel = getRoleLabel(role);
     const lang = (app && app.globalData && app.globalData.lang) ? app.globalData.lang : 'zh';
-    this.setData({ role, roleLabel, langIndex: lang==='en' ? 1 : 0, themeActiveColor: themeColor });
+    this.setData({ role, roleLabel, langIndex: lang==='en' ? 1 : 0, themeActiveColor: themeColor, showFallbackNav: !hasTabBar });
   },
   onOld(e){ this.setData({ oldPwd: e.detail.value }); },
   onNew(e){ this.setData({ newPwd: e.detail.value }); },
@@ -40,6 +41,10 @@ Page({
     const tabBar = typeof this.getTabBar === 'function' ? this.getTabBar() : null;
     if (tabBar && typeof tabBar.setThemeColor === 'function') {
       tabBar.setThemeColor(color);
+    }
+    const fallbackNav = this.selectComponent('#fallback-nav');
+    if (fallbackNav && typeof fallbackNav.setThemeColor === 'function') {
+      fallbackNav.setThemeColor(color);
     }
     wx.showToast({ title: '主题已更新', icon: 'success' });
   }

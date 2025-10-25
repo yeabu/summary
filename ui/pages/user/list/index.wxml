@@ -1,57 +1,170 @@
-<view class="page">
-<view class="card" wx:for="{{items}}" wx:key="id">
-  <view class="row" style="justify-content: space-between;">
-    <view class="col">
-      <text>{{item.name}}</text>
-      <text class="muted">{{item.roleLabel}}</text>
+<view class="page {{deviceProfileClass}}">
+  <view class="filter-card">
+    <view class="filter-row">
+      <input
+        class="search-field"
+        placeholder="搜索姓名、联系方式或证件"
+        value="{{filters.keyword}}"
+        bindinput="onSearchInput"
+        confirm-type="search"
+        bindconfirm="onSearchConfirm"
+      />
+      <button class="reset-btn" wx:if="{{filters.keyword || filters.role !== 'all' || filters.base !== 'all'}}" size="mini" bindtap="onResetFilters">
+        重置
+      </button>
     </view>
-    <view class="col" style="align-items:flex-end;">
-      <text class="muted">{{item.baseNames}}</text>
-      <view>
-        <button size="mini" bindtap="onEdit" data-id="{{item.id}}">编辑</button>
-        <button size="mini" type="warn" bindtap="onDelete" data-id="{{item.id}}">删除</button>
-      </view>
+    <view class="filter-bar">
+      <picker class="filter-picker" range="{{roleFilterOptions}}" range-key="label" value="{{roleFilterIndex}}" bindchange="onRoleFilterChange">
+        <view class="filter-chip">{{roleFilterOptions[roleFilterIndex] ? roleFilterOptions[roleFilterIndex].label : '全部角色'}}</view>
+      </picker>
+      <picker class="filter-picker" range="{{baseFilterOptions}}" range-key="label" value="{{baseFilterIndex}}" bindchange="onBaseFilterChange">
+        <view class="filter-chip">{{baseFilterOptions[baseFilterIndex] ? baseFilterOptions[baseFilterIndex].label : '全部基地'}}</view>
+      </picker>
     </view>
   </view>
-</view>
 
-<view class="fab" bindtap="openCreate" style="{{fabStyle}}">
-  <view class="fab-inner">
-    <view class="fab-bar"></view>
-    <view class="fab-bar v"></view>
-  </view>
-</view>
+  <block wx:if="{{loading}}">
+    <view class="empty">正在加载人员数据...</view>
+  </block>
+  <block wx:elif="{{!list.length}}">
+    <view class="empty">暂无符合条件的人员</view>
+  </block>
+  <block wx:else>
+    <view class="user-grid">
+      <view class="user-card" wx:for="{{list}}" wx:key="id">
+        <view class="user-card__header">
+          <text class="user-name">{{item.name}}</text>
+          <text class="user-role" style="color: {{themeColor}};">{{item.roleLabel}}</text>
+        </view>
+        <view class="user-meta">
+          <view class="meta-row">
+            <text class="meta-label">所属基地</text>
+            <text class="meta-value">{{item.baseNames || '—'}}</text>
+          </view>
+          <view class="meta-row">
+            <text class="meta-label">加入日期</text>
+            <text class="meta-value">{{item.joinDate || '—'}}</text>
+          </view>
+          <view class="meta-row">
+            <text class="meta-label">联系方式</text>
+            <text class="meta-value">{{item.phone || '—'}} {{item.email || ''}}</text>
+          </view>
+          <view class="meta-row">
+            <text class="meta-label">证件信息</text>
+            <text class="meta-value">
+              {{item.visaType ? '签证：' + item.visaType + ' ' : ''}}{{item.passportNo ? '护照：' + item.passportNo + ' ' : ''}}{{item.idCard ? '证件：' + item.idCard : ''}}
+            </text>
+          </view>
+          <view class="meta-row" wx:if="{{item.emergencyContact || item.emergencyPhone}}">
+            <text class="meta-label">紧急联系人</text>
+            <text class="meta-value">{{item.emergencyContact || ''}} {{item.emergencyPhone || ''}}</text>
+          </view>
+          <view class="meta-row" wx:if="{{item.remark}}">
+            <text class="meta-label">备注</text>
+            <text class="meta-value">{{item.remark}}</text>
+          </view>
+        </view>
+        <view class="user-actions">
+          <button size="mini" bindtap="onEdit" data-id="{{item.id}}">编辑</button>
+          <button size="mini" type="warn" bindtap="onDelete" data-id="{{item.id}}">删除</button>
+        </view>
+      </view>
+    </view>
+  </block>
 
-<view class="sheet" wx:if="{{formOpen}}">
-  <view class="sheet-body">
-    <view class="row" style="justify-content: space-between; align-items:center;">
-      <text style="font-weight:600;">{{form.id ? '编辑用户' : '新增用户'}}</text>
-      <button size="mini" bindtap="closeForm">关闭</button>
+  <view class="fab" bindtap="openCreate" style="{{fabStyle}}">
+    <view class="fab-inner">
+      <view class="fab-bar"></view>
+      <view class="fab-bar v"></view>
     </view>
-    <view class="cell-group">
-      <view class="cell"><text class="cell-title">用户名</text><input class="input" value="{{form.name}}" bindinput="iName"/></view>
-      <view class="cell">
-        <text class="cell-title">角色</text>
-        <picker mode="selector" range="{{roleOptions}}" range-key="label" value="{{roleIndex}}" bindchange="onRole">
-          <view class="picker">{{roleOptions[roleIndex] ? roleOptions[roleIndex].label : ''}}</view>
-        </picker>
-      </view>
-      <view class="cell" wx:if="{{!form.id}}"><text class="cell-title">密码</text><input class="input" password="true" value="{{form.password}}" bindinput="iPwd"/></view>
-    </view>
-    <view class="cell-group" style="margin-top: 16rpx;">
-      <view class="cell" style="flex-direction: column; align-items: stretch;">
-        <text class="cell-title">所属基地</text>
-        <checkbox-group bindchange="onBases">
-          <label wx:for="{{bases}}" wx:key="id" class="row" style="gap: 12rpx; margin: 6rpx 0;">
-            <checkbox value="{{item.id}}" checked="{{checkedBaseIds[item.id]}}"/>
-            <text>{{item.name}}</text>
-          </label>
-        </checkbox-group>
-      </view>
-    </view>
-    <view class="spacer"></view>
-    <button class="btn-primary" style="background: {{themeColor}}; border-color: {{themeColor}};" bindtap="save" loading="{{saving}}">保存</button>
   </view>
+
+  <view class="form-layer" wx:if="{{formOpen}}">
+    <view class="form-mask" bindtap="closeForm"></view>
+    <view class="form-dialog {{isTablet ? 'tablet' : 'mobile'}}">
+      <view class="dialog-header with-actions">
+        <text class="dialog-title">{{form.id ? '编辑人员' : '新增人员'}}</text>
+        <view class="dialog-actions">
+          <button class="btn-secondary" size="mini" style="color: {{themeColor}}; border-color: {{themeColor}};" bindtap="closeForm">取消</button>
+          <button class="btn-primary" size="mini" style="background: {{themeColor}}; border-color: {{themeColor}};" bindtap="save" loading="{{saving}}">保存</button>
+        </view>
+      </view>
+      <scroll-view scroll-y class="dialog-scroll" enable-flex style="min-height: 360px; max-height: {{bodyMinHeight}}px;">
+        <view class="form-group">
+          <text class="form-label">用户名</text>
+          <input class="form-input" placeholder="请输入姓名" value="{{form.name}}" bindinput="onNameInput" />
+          <text class="form-error" wx:if="{{formErrors.name}}">{{formErrors.name}}</text>
+        </view>
+        <view class="form-group">
+          <text class="form-label">角色</text>
+          <picker mode="selector" range="{{roleOptions}}" range-key="label" value="{{rolePickerIndex}}" bindchange="onRoleChange">
+            <view class="form-picker">{{roleOptions[rolePickerIndex] ? roleOptions[rolePickerIndex].label : '请选择角色'}}</view>
+          </picker>
+          <text class="form-error" wx:if="{{formErrors.role}}">{{formErrors.role}}</text>
+        </view>
+        <view class="form-group">
+          <text class="form-label">所属基地</text>
+          <checkbox-group class="base-grid" bindchange="onBaseCheckboxChange">
+            <label class="base-chip" wx:for="{{bases}}" wx:key="id">
+              <checkbox value="{{item.id}}" checked="{{checkedBaseIds[item.id]}}" />
+              <text>{{item.name}}</text>
+            </label>
+          </checkbox-group>
+          <text class="form-error" wx:if="{{formErrors.base_ids}}">{{formErrors.base_ids}}</text>
+        </view>
+        <view class="form-group" wx:if="{{!form.id}}">
+          <text class="form-label">初始密码</text>
+          <input class="form-input" password="true" placeholder="至少 6 位" value="{{form.password}}" bindinput="onPasswordInput" />
+          <text class="form-error" wx:if="{{formErrors.password}}">{{formErrors.password}}</text>
+        </view>
+        <view class="form-group">
+          <text class="form-label">加入日期</text>
+          <picker mode="date" value="{{form.join_date}}" bindchange="onJoinDateChange">
+            <view class="form-picker">{{form.join_date || '选择日期'}}</view>
+          </picker>
+        </view>
+        <view class="form-grid">
+          <view class="form-group">
+            <text class="form-label">手机号</text>
+            <input class="form-input" placeholder="请输入手机号" value="{{form.phone}}" bindinput="onPhoneInput" />
+          </view>
+          <view class="form-group">
+            <text class="form-label">邮箱</text>
+            <input class="form-input" placeholder="请输入邮箱" value="{{form.email}}" bindinput="onEmailInput" />
+            <text class="form-error" wx:if="{{formErrors.email}}">{{formErrors.email}}</text>
+          </view>
+        </view>
+        <view class="form-grid">
+          <view class="form-group">
+            <text class="form-label">签证类型</text>
+            <input class="form-input" placeholder="如商务签、工作签" value="{{form.visa_type}}" bindinput="onVisaInput" />
+          </view>
+          <view class="form-group">
+            <text class="form-label">护照号</text>
+            <input class="form-input" placeholder="请输入护照号" value="{{form.passport_no}}" bindinput="onPassportInput" />
+          </view>
+        </view>
+        <view class="form-grid">
+          <view class="form-group">
+            <text class="form-label">证件号</text>
+            <input class="form-input" placeholder="身份证或员工编号" value="{{form.id_card}}" bindinput="onIdCardInput" />
+          </view>
+          <view class="form-group">
+            <text class="form-label">紧急联系人</text>
+            <input class="form-input" placeholder="紧急联系人姓名" value="{{form.emergency_contact}}" bindinput="onEmergencyContactInput" />
+          </view>
+        </view>
+        <view class="form-group">
+          <text class="form-label">紧急联系电话</text>
+          <input class="form-input" placeholder="紧急联系电话" value="{{form.emergency_phone}}" bindinput="onEmergencyPhoneInput" />
+        </view>
+        <view class="form-group">
+          <text class="form-label">备注</text>
+          <textarea class="form-textarea" placeholder="补充说明、签证到期、签约信息等" value="{{form.remark}}" bindinput="onRemarkInput" />
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <bottom-nav id="fallback-nav" wx:if="{{showFallbackNav}}" active="mine" />
 </view>
-</view>
-<bottom-nav active="mine" />

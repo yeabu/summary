@@ -1,6 +1,6 @@
 {
   "navigationBarTitleText": "应付款详情",
   "usingComponents": {
-    "bottom-nav": "/components/bottom-nav/index"
+    "bottom-nav": "../../../components/bottom-nav/index"
   }
 }

@@ -1,21 +1,19 @@
 #!/usr/bin/env sh
 set -e
 
-# Generate runtime env config for frontend
 HTML_DIR="/usr/share/nginx/html"
 ENV_JS="$HTML_DIR/env.js"
 
-# Use VITE_API_URL if provided at runtime; otherwise empty (same-origin)
+# Allow runtime override for API base; default to same-origin
 : "${VITE_API_URL:=}"
 
-cat > "$ENV_JS" <<EOF
+cat > "$ENV_JS" <<EOF_ENV
 // Runtime-injected config
 window.__APP_CONFIG__ = {
   API_URL: "${VITE_API_URL}"
 };
-EOF
+EOF_ENV
 
-echo "[entrypoint] Wrote $ENV_JS with API_URL='${VITE_API_URL}'"
+echo "[frontend-entrypoint] Wrote $ENV_JS with API_URL='${VITE_API_URL}'"
 
 exec nginx -g 'daemon off;'
-

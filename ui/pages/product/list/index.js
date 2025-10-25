@@ -23,17 +23,63 @@ function createEmptyPurchaseForm() {
   };
 }
 Page({
-  data: { items: [], loading: true, formOpen:false, form:{ name:'', base_unit:'', spec:'', unit_price:'', currency:'CNY', supplier_id:'' }, suppliers:[], supplierNames:[], supplierIndex:0, currencyCodes: CURRENCY_CODES, currencyLabels: CURRENCY_LABELS, currencyIndex:0, saving:false, fabStyle:'', themeColor:'#B4282D', purchaseFormOpen:false, purchaseForm: createEmptyPurchaseForm(), purchaseSaving:false },
+  data: {
+    items: [],
+    loading: true,
+    formOpen: false,
+    form: { name:'', base_unit:'', spec:'', unit_price:'', currency:'CNY', supplier_id:'' },
+    suppliers: [],
+    supplierNames: [],
+    supplierIndex: 0,
+    currencyCodes: CURRENCY_CODES,
+    currencyLabels: CURRENCY_LABELS,
+    currencyIndex: 0,
+    saving: false,
+    fabStyle: '',
+    themeColor: '#B4282D',
+    purchaseFormOpen: false,
+    purchaseForm: createEmptyPurchaseForm(),
+    purchaseSaving: false,
+    showFallbackNav: false,
+    deviceProfileClass: '',
+    isTablet: false
+  },
   async onShow(){
-    const role = (getApp().globalData && getApp().globalData.role) ? getApp().globalData.role : (wx.getStorageSync('role') || '');
-    if (!canAccess(role, ['admin'])) {
+    const app = typeof getApp === 'function' ? getApp() : null;
+    const role = (app && app.globalData && app.globalData.role) ? app.globalData.role : (wx.getStorageSync('role') || '');
+    if (!canAccess(role, ['admin', 'warehouse_admin'])) {
       wx.showToast({ title: '无权限访问', icon: 'none' });
       setTimeout(() => { wx.switchTab({ url: '/pages/home/index' }); }, 600);
       this.setData({ loading: false });
       return;
     }
     const themeColor = theme.getThemeColor();
-    this.setData({ loading: true, themeColor, fabStyle: theme.makeFabStyle(themeColor) });
+    const tabBar = typeof this.getTabBar === 'function' ? this.getTabBar() : null;
+    const hasTabBar = !!(tabBar && typeof tabBar.refreshTabs === 'function');
+    if (hasTabBar) {
+      if (typeof tabBar.refreshTabs === 'function') { tabBar.refreshTabs(); }
+      if (typeof tabBar.syncWithRoute === 'function') { tabBar.syncWithRoute(); }
+      if (typeof tabBar.setThemeColor === 'function') { tabBar.setThemeColor(themeColor); }
+    }
+    const deviceProfileClass = app && app.globalData ? (app.globalData.deviceProfileClass || '') : (wx.getStorageSync('deviceProfileClass') || '');
+    const isTablet = app && app.globalData ? !!app.globalData.isTablet : !!wx.getStorageSync('isTablet');
+    this.setData({
+      loading: true,
+      themeColor,
+      fabStyle: theme.makeFabStyle(themeColor),
+      showFallbackNav: !hasTabBar,
+      deviceProfileClass,
+      isTablet
+    });
+    wx.setNavigationBarColor({
+      frontColor: '#000000',
+      backgroundColor: '#ffffff',
+      animation: { duration: 0, timingFunc: 'linear' }
+    });
+    const fallbackNav = this.selectComponent('#fallback-nav');
+    if (!hasTabBar && fallbackNav && typeof fallbackNav.setThemeColor === 'function') {
+      fallbackNav.setThemeColor(themeColor);
+    }
     try{
       const [plist, slist] = await Promise.all([
         req.get('/api/product/list'),

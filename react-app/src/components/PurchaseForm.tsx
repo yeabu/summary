@@ -49,6 +49,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
 }) => {
   const user = useAuthStore((state) => state.user);
   const isAdmin = user?.role === 'admin';
+  const isWarehouseAdmin = user?.role === 'warehouse_admin';
   const userBase = user?.base || '';
   
   // 辅助函数：获取基地名称
@@ -63,7 +64,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
     purchase_date: dayjs().format('YYYY-MM-DD'),
     total_amount: 0,
     receiver: '',
-    base: isAdmin ? undefined : (initial?.base || { name: userBase } as Base), // 管理员默认不选；基地代理使用自己的基地
+    base: (isAdmin || isWarehouseAdmin) ? undefined : (initial?.base || { name: userBase } as Base), // 管理员或仓库管理员默认不选；基地代理使用自己的基地
     notes: '',
     items: [
       {
@@ -259,7 +260,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
       setFormData({
         ...initial,
         supplier: supplierValue,
-        base: initial.base || (isAdmin ? undefined : ({ name: userBase } as Base)), // 确保 base 字段正确设置
+        base: initial.base || ((isAdmin || isWarehouseAdmin) ? undefined : ({ name: userBase } as Base)), // 确保 base 字段正确设置
         // 更新记录时默认带入当前日期（可修改）
         purchase_date: dayjs().format('YYYY-MM-DD'),
         items: initial.items?.length > 0 ? initial.items : [{
@@ -270,7 +271,7 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
         }]
       });
     }
-  }, [initial, isAdmin, userBase]);
+  }, [initial, isAdmin, isWarehouseAdmin, userBase]);
 
   // 更新采购项
   const updateItem = (index: number, field: keyof PurchaseItem, value: any) => {
@@ -526,9 +527,9 @@ const PurchaseForm: React.FC<PurchaseFormProps> = ({
           />
         </Grid>
 
-        {/* 基地选择：管理员可选择，基地代理只显示 */}
+        {/* 基地选择：管理员与仓库管理员可选择，其余角色仅展示 */}
         <Grid item xs={12} md={6}>
-          {isAdmin ? (
+          {isAdmin || isWarehouseAdmin ? (
             <TextField
               fullWidth
               select

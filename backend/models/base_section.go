@@ -2,6 +2,8 @@ package models
 
 import (
 	"time"
+
+	"gorm.io/gorm"
 )
 
 // BaseSection 基地区域模型
@@ -16,4 +18,8 @@ type BaseSection struct {
 	CreatedBy   uint      `json:"created_by"`                   // 创建人ID
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+func (bs *BaseSection) BeforeCreate(tx *gorm.DB) error {
+	return assignSnowflakeID(&bs.ID)
 }

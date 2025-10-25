@@ -1,4 +1,4 @@
-<view class="page">
+<view class="page {{deviceProfileClass}}">
 <block wx:if="{{items && items.length}}">
   <view class="cell-group">
     <view class="cell" wx:for="{{items}}" wx:key="id">
@@ -20,7 +20,7 @@
   </view>
 </block>
 
-<view class="fab" bindtap="openCreate">
+<view class="fab" bindtap="openCreate" style="{{fabStyle}}">
   <view class="fab-inner">
     <view class="fab-bar"></view>
     <view class="fab-bar v"></view>
@@ -52,4 +52,4 @@
   </view>
 </view>
 </view>
-<bottom-nav active="inventory" />
+<bottom-nav id="fallback-nav" wx:if="{{showFallbackNav}}" active="inventory" />

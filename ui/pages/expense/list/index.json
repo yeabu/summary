@@ -1,5 +1,7 @@
 {
   "navigationBarTitleText": "开支记录",
-  "enablePullDownRefresh": true
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "bottom-nav": "../../../components/bottom-nav/index"
+  }
 }
-

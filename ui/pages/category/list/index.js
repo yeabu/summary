@@ -2,9 +2,23 @@ const req = require('../../../utils/request');
 const theme = require('../../../utils/theme');
 const { canAccess } = require('../../../utils/role');
 Page({
-  data: { items: [], loading: true, formOpen:false, form:{ name:'', status:'active' }, statusRange:['active','inactive'], statusIndex:0, saving:false, fabStyle:'', themeColor:'#B4282D' },
+  data: {
+    items: [],
+    loading: true,
+    formOpen: false,
+    form:{ name:'', status:'active' },
+    statusRange:['active','inactive'],
+    statusIndex:0,
+    saving:false,
+    fabStyle:'',
+    themeColor:'#B4282D',
+    showFallbackNav: false,
+    deviceProfileClass: '',
+    isTablet: false
+  },
   async onShow(){
-    const role = (getApp().globalData && getApp().globalData.role) ? getApp().globalData.role : (wx.getStorageSync('role') || '');
+    const app = typeof getApp === 'function' ? getApp() : null;
+    const role = (app && app.globalData && app.globalData.role) ? app.globalData.role : (wx.getStorageSync('role') || '');
     if (!canAccess(role, ['admin'])) {
       wx.showToast({ title: '无权限访问', icon: 'none' });
       setTimeout(() => { wx.switchTab({ url: '/pages/home/index' }); }, 600);
@@ -12,7 +26,32 @@ Page({
       return;
     }
     const themeColor = theme.getThemeColor();
-    this.setData({ loading:true, themeColor, fabStyle: theme.makeFabStyle(themeColor) });
+    const tabBar = typeof this.getTabBar === 'function' ? this.getTabBar() : null;
+    const hasTabBar = !!(tabBar && typeof tabBar.refreshTabs === 'function');
+    if (hasTabBar) {
+      if (typeof tabBar.refreshTabs === 'function') { tabBar.refreshTabs(); }
+      if (typeof tabBar.syncWithRoute === 'function') { tabBar.syncWithRoute(); }
+      if (typeof tabBar.setThemeColor === 'function') { tabBar.setThemeColor(themeColor); }
+    }
+    const deviceProfileClass = app && app.globalData ? (app.globalData.deviceProfileClass || '') : (wx.getStorageSync('deviceProfileClass') || '');
+    const isTablet = app && app.globalData ? !!app.globalData.isTablet : !!wx.getStorageSync('isTablet');
+    this.setData({
+      loading:true,
+      themeColor,
+      fabStyle: theme.makeFabStyle(themeColor),
+      showFallbackNav: !hasTabBar,
+      deviceProfileClass,
+      isTablet
+    });
+    const fallbackNav = this.selectComponent('#fallback-nav');
+    if (!hasTabBar && fallbackNav && typeof fallbackNav.setThemeColor === 'function') {
+      fallbackNav.setThemeColor(themeColor);
+    }
+    wx.setNavigationBarColor({
+      frontColor: '#000000',
+      backgroundColor: '#ffffff',
+      animation: { duration: 0, timingFunc: 'linear' }
+    });
     try{
       const items = await req.get('/api/expense-category/list');
       this.setData({ items: (Array.isArray(items) ? items : (items.records || [])), themeColor });

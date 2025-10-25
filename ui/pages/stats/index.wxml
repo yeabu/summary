@@ -1,27 +1,36 @@
-<view class="card">
-  <view class="row" style="gap: 16rpx; align-items:center;">
-    <picker mode="date" value="{{start}}" bindchange="onStart"><view class="picker">开始: {{start}}</view></picker>
-    <picker mode="date" value="{{end}}" bindchange="onEnd"><view class="picker">结束: {{end}}</view></picker>
-    <button size="mini" bindtap="load">统计</button>
-  </view>
-</view>
-<view class="card">
-  <view class="row" style="justify-content: space-between;">
-    <text class="muted">总开支</text>
-    <text style="font-weight:600;">¥{{totalExpense}}</text>
-  </view>
-  <view class="row" style="justify-content: space-between;margin-top:8rpx;">
-    <text class="muted">总采购</text>
-    <text style="font-weight:600;">¥{{totalPurchase}}</text>
-  </view>
-</view>
-<view class="card">
-  <text class="muted">按基地开支</text>
-  <block wx:for="{{expenseByBase}}" wx:key="name">
-    <view class="row" style="justify-content: space-between;">
-      <text>{{item.base}}</text>
-      <text>¥{{item.total}}</text>
+<view class="page {{deviceProfileClass}}">
+  <view class="card">
+    <view class="row" style="gap: 16rpx; align-items: center;">
+      <picker mode="date" value="{{start}}" bindchange="onStart">
+        <view class="picker">开始: {{start}}</view>
+      </picker>
+      <picker mode="date" value="{{end}}" bindchange="onEnd">
+        <view class="picker">结束: {{end}}</view>
+      </picker>
+      <button size="mini" bindtap="load">统计</button>
     </view>
-  </block>
-</view>
+  </view>
 
+  <view class="card">
+    <view class="row" style="justify-content: space-between;">
+      <text class="muted">总开支</text>
+      <text style="font-weight:600;">¥{{totalExpense}}</text>
+    </view>
+    <view class="row" style="justify-content: space-between; margin-top: 8rpx;">
+      <text class="muted">总采购</text>
+      <text style="font-weight:600;">¥{{totalPurchase}}</text>
+    </view>
+  </view>
+
+  <view class="card">
+    <text class="muted">按基地开支</text>
+    <block wx:for="{{expenseByBase}}" wx:key="name">
+      <view class="row" style="justify-content: space-between;">
+        <text>{{item.base}}</text>
+        <text>¥{{item.total}}</text>
+      </view>
+    </block>
+  </view>
+
+  <bottom-nav id="fallback-nav" wx:if="{{showFallbackNav}}" active="dynamic" />
+</view>

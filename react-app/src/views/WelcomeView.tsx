@@ -48,6 +48,7 @@ const WelcomeView = () => {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
   const isAdmin = user?.role === 'admin';
+  const isWarehouseAdmin = user?.role === 'warehouse_admin';
   const [rates, setRates] = useState<Array<{ currency:string; rate_to_cny:number; updated_at?: string }>>([]);
   const [rateLoading, setRateLoading] = useState(false);
   const [rateError, setRateError] = useState('');
@@ -85,7 +86,7 @@ const WelcomeView = () => {
       icon: <ExpenseIcon sx={{ fontSize: 40 }} />,
       path: '/expense/list',
       color: '#2196f3',
-      available: true
+      available: user?.role !== 'warehouse_admin'
     },
     {
       title: '采购记录管理',
@@ -93,7 +94,7 @@ const WelcomeView = () => {
       icon: <PurchaseIcon sx={{ fontSize: 40 }} />,
       path: '/purchase/list',
       color: '#4caf50',
-      available: isAdmin
+      available: isAdmin || isWarehouseAdmin
     },
     {
       title: '库存管理',
@@ -101,7 +102,7 @@ const WelcomeView = () => {
       icon: <InventoryIcon sx={{ fontSize: 40 }} />,
       path: '/inventory/management',
       color: '#ff9800',
-      available: isAdmin || user?.role === 'base_agent'
+      available: isAdmin || isWarehouseAdmin || user?.role === 'base_agent'
     },
     {
       title: '基地管理',
@@ -142,9 +143,12 @@ const WelcomeView = () => {
         </Typography>
         <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1, gap: 1 }}>
           <Chip 
-            label={user?.role === 'admin' ? '管理员' : 
-                   user?.role === 'factory_manager' ? '厂长' :
-                   user?.role === 'captain' ? '队长' : '基地代理'} 
+            label={
+              user?.role === 'admin' ? '管理员' :
+              user?.role === 'warehouse_admin' ? '仓库管理员' :
+              user?.role === 'factory_manager' ? '厂长' :
+              user?.role === 'captain' ? '队长' : '基地代理'
+            } 
             color={user?.role === 'admin' ? 'primary' : 'secondary'}
             variant="outlined"
           />

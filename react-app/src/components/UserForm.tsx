@@ -61,13 +61,19 @@ const UserForm: React.FC<UserFormProps> = ({
   const [formData, setFormData] = useState<User>({
     name: '',
     role: 'captain' as User['role'],
-    bases: [], // 使用bases数组而不是单个base
-    base_ids: [], // 添加base_ids字段
+    bases: [],
+    base_ids: [],
     password: '',
     join_date: '',
-    mobile: '',
+    phone: '',
+    email: '',
     passport_number: '',
-    visa_expiry_date: ''
+    visa_type: '',
+    visa_expiry_date: '',
+    id_card: '',
+    emergency_contact: '',
+    emergency_phone: '',
+    remark: ''
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -75,6 +81,7 @@ const UserForm: React.FC<UserFormProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [availableBases, setAvailableBases] = useState<string[]>([]);
   const [allBases, setAllBases] = useState<Base[]>([]); // 存储所有基地对象
+  const [baseSelectOpen, setBaseSelectOpen] = useState(false);
   
   // 创建 ApiClient 实例（保持稳定引用，避免 useEffect 反复触发）
   const apiClient = useMemo(() => new ApiClient(), []);
@@ -83,7 +90,7 @@ const UserForm: React.FC<UserFormProps> = ({
 
   // 可选角色列表：基地代理仅可创建队长
   const roleOptions = useMemo(() => (
-    isBaseAgent ? ['captain'] : ['admin', 'base_agent', 'captain', 'factory_manager']
+    isBaseAgent ? ['captain'] : ['admin', 'warehouse_admin', 'base_agent', 'captain', 'factory_manager']
   ), [isBaseAgent]);
 
   const effectiveRole = useMemo(() => {
@@ -130,7 +137,14 @@ const UserForm: React.FC<UserFormProps> = ({
       setFormData({
         ...initial,
         role: nextRole,
-        password: '' // 编辑时不显示原密码
+        password: '',
+        phone: initial.phone || (initial as any).mobile || '',
+        email: initial.email || '',
+        visa_type: initial.visa_type || '',
+        id_card: initial.id_card || '',
+        emergency_contact: initial.emergency_contact || '',
+        emergency_phone: initial.emergency_phone || '',
+        remark: initial.remark || ''
       });
     } else {
       setFormData({
@@ -140,9 +154,15 @@ const UserForm: React.FC<UserFormProps> = ({
         base_ids: [], // 初始化base_ids字段
         password: '',
         join_date: '',
-        mobile: '',
+        phone: '',
+        email: '',
         passport_number: '',
-        visa_expiry_date: ''
+        visa_type: '',
+        visa_expiry_date: '',
+        id_card: '',
+        emergency_contact: '',
+        emergency_phone: '',
+        remark: ''
       });
     }
     setErrors({});
@@ -158,8 +178,8 @@ const UserForm: React.FC<UserFormProps> = ({
     setFormData(prev => ({
       ...prev,
       role: effectiveRole as User['role'],
-      bases: effectiveRole === 'admin' ? [] : prev.bases,
-      base_ids: effectiveRole === 'admin' ? [] : prev.base_ids
+      bases: effectiveRole === 'admin' || effectiveRole === 'warehouse_admin' ? [] : prev.bases,
+      base_ids: effectiveRole === 'admin' || effectiveRole === 'warehouse_admin' ? [] : prev.base_ids
     }));
   }, [effectiveRole, formData.role]);
 
@@ -168,8 +188,6 @@ const UserForm: React.FC<UserFormProps> = ({
 
     if (!formData.name?.trim()) {
       newErrors.name = '用户名不能为空';
-    } else if (formData.name.trim().length < 3) {
-      newErrors.name = '用户名至少3个字符';
     }
 
     if (!formData.role) {
@@ -177,8 +195,8 @@ const UserForm: React.FC<UserFormProps> = ({
     }
 
     // 非管理员角色必须选择基地
-    if (formData.role && formData.role !== 'admin' && (!formData.bases || formData.bases.length === 0)) {
-      newErrors.bases = '非管理员角色必须选择至少一个基地';
+    if (formData.role && formData.role !== 'admin' && formData.role !== 'warehouse_admin' && (!formData.bases || formData.bases.length === 0)) {
+      newErrors.bases = '除管理员和仓库管理员外的角色必须选择至少一个基地';
     }
 
     // 新增用户时密码必填，编辑时密码可选
@@ -208,7 +226,7 @@ const UserForm: React.FC<UserFormProps> = ({
       };
       
       // 如果是管理员角色，清空基地字段
-      if (submitData.role === 'admin') {
+      if (submitData.role === 'admin' || submitData.role === 'warehouse_admin') {
         submitData.bases = [];
         submitData.base_ids = [];
       }
@@ -238,13 +256,13 @@ const UserForm: React.FC<UserFormProps> = ({
     setFormData(prev => ({
       ...prev,
       role: nextRole,
-      bases: nextRole === 'admin' ? [] : prev.bases, // 管理员清空基地
-      base_ids: nextRole === 'admin' ? [] : prev.base_ids
+      bases: (nextRole === 'admin' || nextRole === 'warehouse_admin') ? [] : prev.bases, // 管理员及仓库管理员清空基地
+      base_ids: (nextRole === 'admin' || nextRole === 'warehouse_admin') ? [] : prev.base_ids
     }));
     if (errors.role) {
       setErrors(prev => ({ ...prev, role: '' }));
     }
-    if (nextRole === 'admin' && errors.bases) {
+    if ((nextRole === 'admin' || nextRole === 'warehouse_admin') && errors.bases) {
       setErrors(prev => ({ ...prev, bases: '' }));
     }
   };
@@ -258,12 +276,15 @@ const UserForm: React.FC<UserFormProps> = ({
     if (errors.bases) {
       setErrors(prev => ({ ...prev, bases: '' }));
     }
+    setBaseSelectOpen(false);
   };
 
   const getRoleLabel = (role: string) => {
     switch (role) {
       case 'admin':
         return '管理员';
+      case 'warehouse_admin':
+        return '仓库管理员';
       case 'base_agent':
         return '基地代理';
       case 'captain':
@@ -339,7 +360,7 @@ const UserForm: React.FC<UserFormProps> = ({
               </FormControl>
             </Grid>
 
-            {formData.role && formData.role !== 'admin' && (
+            {formData.role && formData.role !== 'admin' && formData.role !== 'warehouse_admin' && (
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth required error={!!errors.bases}>
                   <InputLabel>所属基地</InputLabel>
@@ -349,6 +370,9 @@ const UserForm: React.FC<UserFormProps> = ({
                     label="所属基地"
                     onChange={(e) => handleBaseChange(e.target.value as string[])}
                     disabled={submitting || availableBases.length === 0}
+                    open={baseSelectOpen}
+                    onOpen={() => setBaseSelectOpen(true)}
+                    onClose={() => setBaseSelectOpen(false)}
                     renderValue={(selected) => (selected as string[]).join(', ')}
                   >
                     {availableBases.length === 0 ? (
@@ -422,10 +446,22 @@ const UserForm: React.FC<UserFormProps> = ({
               <TextField
                 label="手机号"
                 fullWidth
-                value={formData.mobile || ''}
-                onChange={(e) => handleChange('mobile', e.target.value)}
+                value={formData.phone || ''}
+                onChange={(e) => handleChange('phone', e.target.value)}
                 disabled={submitting}
                 placeholder="请输入手机号"
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="邮箱"
+                fullWidth
+                value={formData.email || ''}
+                onChange={(e) => handleChange('email', e.target.value)}
+                disabled={submitting}
+                placeholder="请输入邮箱"
+                type="email"
               />
             </Grid>
 
@@ -437,6 +473,17 @@ const UserForm: React.FC<UserFormProps> = ({
                 onChange={(e) => handleChange('passport_number', e.target.value)}
                 disabled={submitting}
                 placeholder="请输入护照号"
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="签证类型"
+                fullWidth
+                value={formData.visa_type || ''}
+                onChange={(e) => handleChange('visa_type', e.target.value)}
+                disabled={submitting}
+                placeholder="请输入签证类型"
               />
             </Grid>
 
@@ -454,12 +501,46 @@ const UserForm: React.FC<UserFormProps> = ({
               />
             </Grid>
 
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="证件号"
+                fullWidth
+                value={formData.id_card || ''}
+                onChange={(e) => handleChange('id_card', e.target.value)}
+                disabled={submitting}
+                placeholder="请输入证件号"
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="紧急联系人"
+                fullWidth
+                value={formData.emergency_contact || ''}
+                onChange={(e) => handleChange('emergency_contact', e.target.value)}
+                disabled={submitting}
+                placeholder="请输入紧急联系人"
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="紧急联系电话"
+                fullWidth
+                value={formData.emergency_phone || ''}
+                onChange={(e) => handleChange('emergency_phone', e.target.value)}
+                disabled={submitting}
+                placeholder="请输入紧急联系电话"
+              />
+            </Grid>
+
             {/* 角色说明 */}
             {formData.role && (
               <Grid item xs={12}>
                 <Alert severity="info" sx={{ mt: 1 }}>
                   <strong>{getRoleLabel(formData.role)}角色说明：</strong>
                   {formData.role === 'admin' && ' 拥有系统所有权限，可以管理基地、用户和查看所有数据。'}
+                  {formData.role === 'warehouse_admin' && ' 负责仓储相关业务，可管理供应商、商品、采购与库存模块。'}
                   {formData.role === 'base_agent' && ' 只能管理自己基地的费用记录，无法访问其他基地数据。'}
                   {formData.role === 'captain' && ' 队长角色，具有特定的团队管理权限。'}
                   {formData.role === 'factory_manager' && ' 厂长角色，负责工厂的整体管理和运营。'}

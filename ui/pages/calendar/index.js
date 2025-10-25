@@ -180,6 +180,9 @@ Page({
     summary: { expenseCount: 0, purchaseCount: 0 },
     themeColor: '#B4282D',
     today: normalizeDate(new Date()),
+    showFallbackNav: false,
+    deviceProfileClass: '',
+    isTablet: false
   },
 
   onLoad() {
@@ -194,6 +197,30 @@ Page({
       themeColor,
     });
     this.loadMonth(year, month, true);
+  },
+
+  onShow() {
+    const tabBar = typeof this.getTabBar === 'function' ? this.getTabBar() : null;
+    const hasTabBar = !!(tabBar && typeof tabBar.refreshTabs === 'function');
+    const themeColor = theme.getThemeColor();
+    if (hasTabBar) {
+      if (typeof tabBar.refreshTabs === 'function') { tabBar.refreshTabs(); }
+      if (typeof tabBar.syncWithRoute === 'function') { tabBar.syncWithRoute(); }
+      if (typeof tabBar.setThemeColor === 'function') { tabBar.setThemeColor(themeColor); }
+    }
+    const app = typeof getApp === 'function' ? getApp() : null;
+    const deviceProfileClass = app && app.globalData ? (app.globalData.deviceProfileClass || '') : (wx.getStorageSync('deviceProfileClass') || '');
+    const isTablet = app && app.globalData ? !!app.globalData.isTablet : !!wx.getStorageSync('isTablet');
+    this.setData({
+      showFallbackNav: !hasTabBar,
+      themeColor,
+      deviceProfileClass,
+      isTablet
+    });
+    const fallback = this.selectComponent('#fallback-nav');
+    if (!hasTabBar && fallback && typeof fallback.setThemeColor === 'function') {
+      fallback.setThemeColor(themeColor);
+    }
   },
 
   onPullDownRefresh() {
